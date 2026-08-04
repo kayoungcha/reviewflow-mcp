@@ -23,7 +23,7 @@ server.registerTool(
         {
           type: "text",
           text: [
-            `안녕하세요!! ${name}님! 👋`,
+            `안녕하세요! ${name}님! 👋`,
             `현재 시각은 ${now.toLocaleTimeString("ko-KR")}입니다.`,
             `컴퓨터 이름은 ${os.hostname()}입니다.`,
           ].join("\n"),
