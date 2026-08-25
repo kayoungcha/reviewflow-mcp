@@ -11,15 +11,20 @@ export async function reviewByCodex(
 ): Promise<ReviewResult> {
   const response = await openai.responses.create({
     model: "gpt-5.4-mini",
+    instructions: `당신은 Jira 요구사항과 Git 변경사항을 비교하는 코드 리뷰어입니다.
+      입력에 Jira 정보가 있다면:
+      1. Jira 티켓의 키, 제목, 목적, 주요 수용 기준을 jiraSummary에 요약합니다.
+      2. Git 변경사항이 Jira 수용 기준을 충족하는지 확인합니다.
+      3. 요구사항과 관계없는 변경이 있는지도 확인합니다.
 
-    instructions: [
-      "당신은 TypeScript와 MCP 서버를 리뷰하는 코드 리뷰어입니다.",
-      "제공된 Git 정보만 근거로 리뷰하세요.",
-      "확인하지 못한 파일 내용은 추측하지 마세요.",
-      "중요한 문제를 우선하고 사소한 문제를 과장하지 마세요.",
-      "모든 답변은 한국어로 작성하세요.",
-    ].join("\n"),
+      입력에 Jira 정보가 없다면:
+      - jiraSummary는 null로 반환합니다.
+      - Git 변경사항만 리뷰합니다.
 
+      summary에는 전체 리뷰 결론을 작성합니다.
+      positives에는 잘된 점을 작성합니다.
+      issues에는 개선할 점을 작성합니다.
+      `,
     input: reviewContext,
     store: false,
 
@@ -31,6 +36,14 @@ export async function reviewByCodex(
         schema: {
           type: "object",
           properties: {
+            jiraSummary: {
+              // 브랜치 리뷰는 문자열,
+              // Jira가 없는 미커밋 리뷰는 null을 반환합니다.
+              type: ["string", "null"],
+
+              description:
+                "Jira 티켓의 키, 제목, 목적, 주요 수용 기준을 요약합니다. Jira 정보가 없으면 null입니다.",
+            },
             summary: {
               type: "string",
             },
@@ -47,7 +60,7 @@ export async function reviewByCodex(
               },
             },
           },
-          required: ["summary", "positives", "issues"],
+          required: ["jiraSummary", "summary", "positives", "issues"],
           additionalProperties: false,
         },
       },
@@ -59,6 +72,7 @@ export async function reviewByCodex(
   }
 
   const parsed = JSON.parse(response.output_text) as {
+    jiraSummary: null | string;
     summary: string;
     positives: string[];
     issues: string[];
@@ -66,6 +80,7 @@ export async function reviewByCodex(
 
   return {
     reviewer: "OpenAI",
+    jiraSummary: parsed.jiraSummary ? parsed.jiraSummary : null,
     summary: parsed.summary,
     positives: parsed.positives,
     issues: parsed.issues,
