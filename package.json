@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "review": "tsx review-orchestrator/index.ts",
+    "review": "node --env-file=.env --import tsx review-orchestrator/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
