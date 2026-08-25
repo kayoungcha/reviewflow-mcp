@@ -73,8 +73,22 @@ jobs:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
           BASE_BRANCH: ${{ github.base_ref }}
           HEAD_BRANCH: ${{ github.head_ref }}
+
+          # 현재 PR 번호입니다.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+          # PR 작성자가 입력한 제목입니다.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+
+          # PR 작성자가 입력한 작업 설명입니다.
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+          # 현재 PR의 GitHub 주소입니다.
+          PR_URL: ${{ github.event.pull_request.html_url }}
+
         run: |
           pnpm review -- "$BASE_BRANCH" "$HEAD_BRANCH" | tee review-result.txt
 
