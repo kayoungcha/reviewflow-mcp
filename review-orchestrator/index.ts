@@ -139,6 +139,11 @@ try {
 
     // OpenAI 리뷰 결과를 터미널에 출력합니다.
     judge([codex]);
+
+    if (codex.verdict === "수정 필요") {
+      console.error("병합 전에 반드시 수정해야 할 문제가 발견되었습니다.");
+      process.exitCode = 1;
+    }
   }
 } catch (error: unknown) {
   const message = error instanceof Error ? error.message : "알 수 없는 오류";

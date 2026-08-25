@@ -34,4 +34,15 @@ export function judge(reviews: ReviewResult[]) {
       console.log(`- ${issue}`);
     }
   }
+
+  // 판정에 따라 터미널과 PR에 표시할 아이콘을 선택합니다.
+
+  const verdict = reviews.find((review) => {
+    return review.verdict !== null;
+  })?.verdict;
+  const verdictIcon =
+    verdict === "통과" ? "✅" : verdict === "수정 권장" ? "🟡" : "❌";
+
+  console.log("\n### 최종 판정");
+  console.log(`${verdictIcon} ${verdict}`);
 }
