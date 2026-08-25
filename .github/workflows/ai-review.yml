@@ -34,8 +34,6 @@ jobs:
       # pnpm을 설치합니다.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       # 프로젝트와 동일한 Node.js 22를 설치합니다.
       - name: Setup Node.js
