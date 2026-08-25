@@ -1,0 +1,89 @@
+# GitHub Actions 화면에 표시되는 작업 이름입니다.
+name: AI Code Review
+
+# Pull Request가 생성되거나 새 커밋이 올라올 때 실행합니다.
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+# GitHub가 발급하는 임시 토큰의 권한입니다.
+permissions:
+  # 저장소 코드를 읽을 수 있습니다.
+  contents: read
+
+  # 실행 결과를 PR 댓글로 작성할 수 있습니다.
+  pull-requests: write
+
+jobs:
+  review:
+    # GitHub가 제공하는 Ubuntu 컴퓨터에서 실행합니다.
+    runs-on: ubuntu-latest
+
+    steps:
+      # 저장소 코드를 GitHub 컴퓨터로 가져옵니다.
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          # 브랜치 비교를 위해 전체 Git 기록을 가져옵니다.
+          fetch-depth: 0
+
+      # pnpm을 설치합니다.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # 프로젝트와 동일한 Node.js 22를 설치합니다.
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # pnpm-lock.yaml을 기준으로 패키지를 설치합니다.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # TypeScript 오류를 먼저 검사합니다.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # GitHub의 원격 브랜치를 로컬 브랜치 이름으로 준비합니다.
+      # branchReviewContext가 main, MCPTEST-4 같은 이름을 찾기 위해 필요합니다.
+      - name: Prepare branches
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          git branch --force "$BASE_BRANCH" "origin/$BASE_BRANCH"
+          git branch --force "$HEAD_BRANCH" "origin/$HEAD_BRANCH"
+
+      # package.json에서 .env를 읽도록 되어 있으므로 빈 파일을 만듭니다.
+      # 실제 비밀값은 이 파일이 아니라 아래 환경변수로 전달됩니다.
+      - name: Prepare environment file
+        run: touch .env
+
+      # 지금까지 터미널에서 실행했던 리뷰 명령을 실행합니다.
+      # 결과는 화면에 출력하면서 review-result.txt에도 저장합니다.
+      - name: Run AI review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          pnpm review -- "$BASE_BRANCH" "$HEAD_BRANCH" | tee review-result.txt
+
+      # 앞에서 저장한 리뷰 결과를 현재 PR의 댓글로 등록합니다.
+      - name: Add review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr comment "$PR_URL" --body-file review-result.txt
