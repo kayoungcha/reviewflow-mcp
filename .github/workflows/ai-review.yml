@@ -92,13 +92,6 @@ jobs:
         run: |
           pnpm review -- "$BASE_BRANCH" "$HEAD_BRANCH" | tee review-result.txt
 
-      # 앞에서 저장한 리뷰 결과를 현재 PR의 댓글로 등록합니다.
-      - name: Add review comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: |
-          gh pr comment "$PR_URL" --body-file review-result.txt
       # 기존 AI 리뷰 댓글이 있으면 수정하고,
       # 없으면 새로운 댓글을 하나 만듭니다.
       - name: Create or update review comment
@@ -123,19 +116,16 @@ jobs:
           # 현재 PR 댓글 중에서:
           # 1. GitHub Actions 봇이 작성했고
           # 2. 숨겨진 표시가 들어 있는 댓글을 찾습니다.
+
           COMMENT_ID="$(
-           gh api \
-             --paginate \
-             --slurp \
-            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
-            --jq 'flatten
-            | map(
-                select(
+               gh api \
+                "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=50" \
+                --jq 'map(
+                    select(
                     .user.login == "github-actions[bot]"
                     and (.body | contains("<!-- ai-code-review -->"))
-                )
-                )
-            | .[0].id // empty'
+                    )
+                ) | .[0].id // empty'
           )"
 
           # 기존 자동 리뷰 댓글이 있으면 내용을 수정합니다.
