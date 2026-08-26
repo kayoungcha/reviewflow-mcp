@@ -142,13 +142,6 @@ jobs:
           # 1. GitHub Actions 봇이 작성했고
           # 2. 숨겨진 표시가 들어 있는 댓글을 찾습니다.
 
-          # API가 실제로 몇 개의 마커 댓글을 찾았는지 확인합니다.
-          echo "찾은 마커 댓글 개수: ${#COMMENT_IDS[@]}"
-
-          for FOUND_COMMENT_ID in "${COMMENT_IDS[@]}"; do
-            echo "찾은 댓글 ID: $FOUND_COMMENT_ID"
-          done
-
           COMMENT_ID="${COMMENT_IDS[0]:-}"
 
           if [ -n "$COMMENT_ID" ]; then
