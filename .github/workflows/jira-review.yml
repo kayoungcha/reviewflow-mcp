@@ -1,0 +1,152 @@
+name: Move Jira Issue to Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+jobs:
+  move-jira-to-review:
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show pull request branches
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+
+        run: |
+          echo "작업 브랜치: $HEAD_BRANCH"
+          echo "대상 브랜치: $BASE_BRANCH"
+
+      - name: Extract Jira Issue Key
+        id: jira
+
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+
+        run: |
+          #브랜치명에서 MCPTEST-9 형태의 jira키를 찾습니다.
+          ISSUE_KEY="$(
+            printf '%s' "$HEAD_BRANCH" \
+            | grep -Eio '[A-Z][A-Z0-9_]*-[0-9]+' \
+            | head -n 1 \
+            | tr '[:lower:]' '[:upper:]' \
+            || true
+          )"
+
+          echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "Jira 티켓 키가 없는 브랜치입니다."
+          else
+            echo "찾은 Jira 티켓: $ISSUE_KEY"
+          fi
+
+      - name: Jira 현재 상태 확인
+        id: status
+
+        if: steps.jira.outputs.issue_key != ''
+
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+          ISSUE_KEY: ${{ steps.jira.outputs.issue_key }}
+          REVIEW_STATUS_ID: ${{ vars.JIRA_REVIEW_STATUS_ID }}
+
+        run: |
+          # 필요한 인증값과 설정값이 모두 존재하는지 검사합니다.
+          if [ -z "$JIRA_BASE_URL" ] || 
+             [ -z "$JIRA_EMAIL" ] ||
+             [ -z "$JIRA_API_TOKEN" ] || 
+             [ -z "$REVIEW_STATUS_ID" ]; then
+           echo "::error::Jira 인증 정보 또는 검토 상태 ID가 필요합니다."
+           exit 1
+          fi
+
+          JIRA_BASE_URL="${JIRA_BASE_URL%/}"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --user "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            --header "Accept: application/json" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY?fields=status" \
+            --output jira-issue.json
+
+          # 현재 상태의 고유 ID를 가져옵니다.
+          CURRENT_STATUS_ID="$(
+            jq -r '.fields.status.id // empty' jira-issue.json
+          )"
+
+          echo "현재 Jira 상태 ID: $CURRENT_STATUS_ID"
+          echo "검토 중 상태 ID: $REVIEW_STATUS_ID"
+
+          if [ "$CURRENT_STATUS_ID" = "$REVIEW_STATUS_ID" ]; then
+            echo "Jira 티켓이 이미 검토 중 상태입니다."
+            echo "already_in_review=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Jira 티켓을 검토 중으로 변경해야 합니다."
+            echo "already_in_review=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Jira 티켓을 검토 중으로 변경
+        if: >
+          steps.jira.outputs.issue_key != '' &&
+          steps.status.outputs.already_in_review == 'false'
+
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+          ISSUE_KEY: ${{ steps.jira.outputs.issue_key }}
+          REVIEW_STATUS_ID: ${{ vars.JIRA_REVIEW_STATUS_ID }}
+
+        run: |
+          # 주소 마지막의 / 제거합니다. 
+          JIRA_BASE_URL="${JIRA_BASE_URL%/}"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --user "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            --header "Accept: application/json" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
+            --output jira-transitions.json
+
+          TRANSITION_ID="$(
+            jq -r \
+              --arg statusId "$REVIEW_STATUS_ID" '
+              [
+                .transitions[]
+                | select(.to.id == $statusId)
+              ][0].id // empty
+            ' jira-transitions.json
+          )"
+
+          if [ -z "$TRANSITION_ID" ]; then
+            echo "::error::검토 중 상태로 이동할 수 있는 Jira transition을 찾지 못했습니다."
+            exit 1
+          fi
+
+          echo "실행할 Jira transition ID: $TRANSITION_ID"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --user "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --data "{\"transition\":{\"id\":\"$TRANSITION_ID\"}}" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions"
+
+          echo "Jira 티켓을 검토 중 상태로 변경했습니다: $ISSUE_KEY"
