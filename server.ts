@@ -513,6 +513,12 @@ server.registerTool(
         signal: AbortSignal.timeout(10_000),
       });
 
+      if (response.status === 404) {
+        return {
+          content: [{ type: "text", text: "" }],
+        };
+      }
+
       if (!response.ok) {
         throw new Error(
           `Jira 요청이 실패했습니다. HTTP 상태: ${response.status}`,

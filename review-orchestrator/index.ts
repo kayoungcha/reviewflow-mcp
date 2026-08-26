@@ -10,6 +10,13 @@ import { reviewByCodex } from "./codex.js";
 // import { reviewByCodexLocal } from "./codex-local.js";
 import { judge } from "./judge.js";
 
+// 브랜치명에서 Jira 티켓 키 부분만 찾아냅니다.
+function extractJiraIssueKey(branchName: string): string | null {
+  const match = branchName.match(/[A-Z][A-Z0-9_]*-\d+/i);
+
+  return match ? match[0].toUpperCase() : null;
+}
+
 const client = new Client({
   name: "review-orchestrator",
   version: "1.0.0",
@@ -45,6 +52,8 @@ try {
     );
   }
 
+  let rawToolResults: unknown[];
+
   // 브랜치 입력 여부에 따라 호출할 MCP 도구를 결정합니다.
   //
   // 브랜치가 있으면:
@@ -53,28 +62,52 @@ try {
   //
   // 브랜치가 없으면:
   // 현재 작업 폴더의 미커밋 변경사항만 조회
-  const rawToolResults =
-    baseBranch && targetBranch
-      ? await Promise.all([
-          client.callTool({
-            name: "branchReviewContext",
-            // MCP 서버의 inputSchema에 정의한 이름과 같아야 합니다.
-            arguments: { baseBranch, targetBranch },
-          }),
+  // 브랜치 두 개가 모두 입력된 경우입니다.
+  if (baseBranch && targetBranch) {
+    // 브랜치명 안에서 Jira 티켓 키를 찾습니다.
+    //
+    // MCPTEST-6-fix라면 MCPTEST-6만 추출됩니다.
+    const jiraIssueKey = extractJiraIssueKey(targetBranch);
 
-          client.callTool({
-            name: "getJiraIssue",
-            arguments: {
-              issueKey: targetBranch,
-            },
-          }),
-        ])
-      : [
-          await client.callTool({
-            name: "gitReviewContext",
-            arguments: {},
-          }),
-        ];
+    // 실행할 MCP 도구 호출들을 배열로 준비합니다.
+    const toolCalls: Promise<unknown>[] = [
+      // Git 브랜치 비교는 항상 실행합니다.
+      client.callTool({
+        name: "branchReviewContext",
+        arguments: {
+          baseBranch,
+          targetBranch,
+        },
+      }),
+    ];
+
+    // 브랜치명에서 Jira 티켓 키를 찾은 경우에만
+    // Jira 티켓 조회 도구를 추가합니다.
+    if (jiraIssueKey) {
+      toolCalls.push(
+        client.callTool({
+          name: "getJiraIssue",
+          arguments: {
+            issueKey: jiraIssueKey,
+          },
+        }),
+      );
+    }
+
+    // Git과 Jira 도구를 동시에 실행합니다.
+    //
+    // Jira 키가 없다면 Git 도구 하나만 실행됩니다.
+    rawToolResults = await Promise.all(toolCalls);
+  } else {
+    // 브랜치를 입력하지 않았다면
+    // 현재 작업 폴더의 미커밋 변경사항을 조회합니다.
+    rawToolResults = [
+      await client.callTool({
+        name: "gitReviewContext",
+        arguments: {},
+      }),
+    ];
+  }
 
   // 여러 MCP 결과를 각각 검사하고 문자열로 바꿉니다.
   const reviewContexts = rawToolResults.map((rawToolResult) => {
