@@ -8,7 +8,7 @@
     "dev": "tsx server.ts",
     "review": "node --env-file=.env --import tsx review-orchestrator/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "tsx --test review-orchestrator/*.test.ts"
   },
   "keywords": [],
   "author": "",

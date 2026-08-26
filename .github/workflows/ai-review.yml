@@ -45,6 +45,10 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # 외부 API를 호출하기 전에 핵심 로직의 자동 테스트를 실행합니다.
+      - name: Test
+        run: pnpm test
+
       # pnpm-lock.yaml을 기준으로 패키지를 설치합니다.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -114,6 +118,13 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
         run: |
+          # AI 리뷰 단계까지 실행되지 않았다면 리뷰 결과 파일이 없습니다.
+          # 이 경우 댓글 작성은 건너뜁니다.
+          if [ ! -f review-result.txt ]; then
+            echo "AI 리뷰 결과 파일이 없어 PR 댓글 작성을 건너뜁니다."
+            exit 0
+          fi
+
           # 자동 리뷰 댓글을 구별하기 위한 숨겨진 표시입니다.
           # HTML 주석이라 실제 PR 화면에는 보이지 않습니다.
           COMMENT_MARKER="<!-- ai-code-review -->"

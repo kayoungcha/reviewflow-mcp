@@ -9,13 +9,7 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { reviewByCodex } from "./codex.js";
 // import { reviewByCodexLocal } from "./codex-local.js";
 import { judge } from "./judge.js";
-
-// 브랜치명에서 Jira 티켓 키 부분만 찾아냅니다.
-function extractJiraIssueKey(branchName: string): string | null {
-  const match = branchName.match(/[A-Z][A-Z0-9_]*-\d+/i);
-
-  return match ? match[0].toUpperCase() : null;
-}
+import { extractJiraIssueKey, shouldFailReview } from "./review-utils.js";
 
 const client = new Client({
   name: "review-orchestrator",
@@ -173,7 +167,7 @@ try {
     // OpenAI 리뷰 결과를 터미널에 출력합니다.
     judge([codex]);
 
-    if (codex.verdict === "수정 필요") {
+    if (shouldFailReview(codex.verdict)) {
       console.error("병합 전에 반드시 수정해야 할 문제가 발견되었습니다.");
       process.exitCode = 1;
     }
