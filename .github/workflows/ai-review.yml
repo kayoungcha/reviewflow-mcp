@@ -1,3 +1,6 @@
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 # GitHub Actions 화면에 표시되는 작업 이름입니다.
 name: AI Code Review
 
@@ -90,12 +93,87 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
 
         run: |
-          pnpm review -- "$BASE_BRANCH" "$HEAD_BRANCH" | tee review-result.txt
+          # pnpm review가 종료 코드 1을 반환하면
+          # tee가 성공해도 이 단계를 실패로 처리합니다.
+          set -o pipefail
 
-      # 앞에서 저장한 리뷰 결과를 현재 PR의 댓글로 등록합니다.
-      - name: Add review comment
+          pnpm review -- "$BASE_BRANCH" "$HEAD_BRANCH" \
+            | tee review-result.txt
+
+      # 기존 AI 리뷰 댓글이 있으면 수정하고,
+      # 없으면 새로운 댓글을 하나 만듭니다.
+      - name: Create or update review comment
+        # 앞의 리뷰가 수정 필요로 실패하더라도
+        # 리뷰 내용을 PR 댓글에는 반드시 작성합니다.
+        if: always()
         env:
+          # GitHub Actions가 자동 발급한 임시 토큰입니다.
           GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+
+          # 현재 Pull Request 번호입니다.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
         run: |
-          gh pr comment "$PR_URL" --body-file review-result.txt
+          # 자동 리뷰 댓글을 구별하기 위한 숨겨진 표시입니다.
+          # HTML 주석이라 실제 PR 화면에는 보이지 않습니다.
+          COMMENT_MARKER="<!-- ai-code-review -->"
+
+          # 숨겨진 표시와 새로운 리뷰 결과를 합칩니다.
+          {
+            echo "$COMMENT_MARKER"
+            cat review-result.txt
+          } > review-comment.md
+
+          mapfile -t COMMENT_IDS < <(
+            gh api \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=50" \
+              --jq 'map(
+                select(
+                  .user.login == "github-actions[bot]"
+                  and (.body | contains("<!-- ai-code-review -->"))
+                )
+              )
+              | sort_by(.updated_at)
+              | reverse
+              | .[].id'
+          )
+
+          # 현재 PR 댓글 중에서:
+          # 1. GitHub Actions 봇이 작성했고
+          # 2. 숨겨진 표시가 들어 있는 댓글을 찾습니다.
+
+          # API가 실제로 몇 개의 마커 댓글을 찾았는지 확인합니다.
+          echo "찾은 마커 댓글 개수: ${#COMMENT_IDS[@]}"
+
+          for FOUND_COMMENT_ID in "${COMMENT_IDS[@]}"; do
+            echo "찾은 댓글 ID: $FOUND_COMMENT_ID"
+          done
+
+          COMMENT_ID="${COMMENT_IDS[0]:-}"
+
+          if [ -n "$COMMENT_ID" ]; then
+            echo "기존 AI 리뷰 댓글을 갱신합니다."
+
+            # 가장 최근 AI 리뷰 댓글을 새로운 결과로 수정합니다.
+            gh api \
+              --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" \
+              -F body=@review-comment.md
+
+            # 두 번째 댓글부터는 중복 댓글이므로 모두 삭제합니다.
+            for DUPLICATE_COMMENT_ID in "${COMMENT_IDS[@]:1}"; do
+              echo "중복 AI 리뷰 댓글을 삭제합니다: $DUPLICATE_COMMENT_ID"
+
+              gh api \
+                --method DELETE \
+                "repos/$GITHUB_REPOSITORY/issues/comments/$DUPLICATE_COMMENT_ID"
+            done
+          else
+            echo "새 AI 리뷰 댓글을 생성합니다."
+
+            # 기존 댓글이 하나도 없을 때만 새 댓글을 만듭니다.
+            gh api \
+              --method POST \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -F body=@review-comment.md
+          fi

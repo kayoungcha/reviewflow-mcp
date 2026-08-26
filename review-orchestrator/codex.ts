@@ -55,6 +55,23 @@ export async function reviewByCodex(
       - summary에는 Jira, Pull Request, Git 변경사항의 전체 일치 여부와 리뷰 결론을 작성합니다.
       - positives에는 잘 구현된 점과 요구사항을 충족한 점을 작성합니다.
       - issues에는 요구사항 불일치, 누락된 구현, 설명과 코드의 차이, 불필요한 변경사항을 구체적으로 작성합니다.
+
+      최종 판정은 다음 기준을 사용하세요.
+      - 통과:
+        Jira 수용 기준을 충족하고, PR 설명과 Git 변경사항이 일치하며,
+        기능·보안·데이터 손실과 관련된 중요한 문제가 없습니다.
+
+      - 수정 권장:
+        핵심 요구사항은 충족하지만 코드 품질, 테스트, 설명 또는 유지보수 측면에서
+        병합을 막을 정도는 아닌 개선사항이 있습니다.
+
+      - 수정 필요:
+        Jira의 필수 수용 기준이 구현되지 않았거나,
+        PR 설명과 실제 코드가 중요한 부분에서 다르거나,
+        기능 오류, 보안 문제, 데이터 손실 가능성처럼 병합 전에 반드시 수정해야 할 문제가 있습니다.
+
+      사소한 스타일 문제만으로 수정 필요를 선택하지 마세요.
+      수정 필요를 선택했다면 issues에 병합을 막아야 하는 이유를 구체적으로 작성하세요.
       `,
     input: reviewContext,
     store: false,
@@ -90,8 +107,19 @@ export async function reviewByCodex(
                 type: "string",
               },
             },
+            verdict: {
+              type: "string",
+              enum: ["통과", "수정 권장", "수정 필요"],
+              description: "코드 리뷰의 최종 판정입니다.",
+            },
           },
-          required: ["jiraSummary", "summary", "positives", "issues"],
+          required: [
+            "jiraSummary",
+            "summary",
+            "positives",
+            "issues",
+            "verdict",
+          ],
           additionalProperties: false,
         },
       },
@@ -107,6 +135,7 @@ export async function reviewByCodex(
     summary: string;
     positives: string[];
     issues: string[];
+    verdict: "통과" | "수정 권장" | "수정 필요";
   };
 
   return {
@@ -115,5 +144,6 @@ export async function reviewByCodex(
     summary: parsed.summary,
     positives: parsed.positives,
     issues: parsed.issues,
+    verdict: parsed.verdict,
   };
 }
