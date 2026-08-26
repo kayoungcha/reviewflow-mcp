@@ -45,13 +45,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      # 외부 API를 호출하기 전에 핵심 로직의 자동 테스트를 실행합니다.
-      - name: Test
-        run: pnpm test
-
       # pnpm-lock.yaml을 기준으로 패키지를 설치합니다.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run:
+          pnpm install --frozen-lockfile
+
+          # 외부 API를 호출하기 전에 핵심 로직의 자동 테스트를 실행합니다.
+      - name: Test
+        run: pnpm test
 
       # TypeScript 오류를 먼저 검사합니다.
       - name: Typecheck
