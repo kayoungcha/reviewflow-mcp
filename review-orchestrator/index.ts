@@ -11,7 +11,7 @@ import { reviewByCodex } from "./codex.js";
 import { judge } from "./judge.js";
 import { extractJiraIssueKey, shouldFailReview } from "./review-utils.js";
 
-const client = new Client({
+const mcpClient = new Client({
   name: "review-orchestrator",
   version: "1.0.0",
 });
@@ -33,7 +33,7 @@ const transport = new StdioClientTransport({
 });
 
 try {
-  await client.connect(transport);
+  await mcpClient.connect(transport);
   const argumentStartIndex = process.argv[2] === "--" ? 3 : 2;
 
   // 실제 사용자가 입력한 브랜치 값만 가져옵니다.
@@ -66,7 +66,7 @@ try {
     // 실행할 MCP 도구 호출들을 배열로 준비합니다.
     const toolCalls: Promise<unknown>[] = [
       // Git 브랜치 비교는 항상 실행합니다.
-      client.callTool({
+      mcpClient.callTool({
         name: "branchReviewContext",
         arguments: {
           baseBranch,
@@ -79,7 +79,7 @@ try {
     // Jira 티켓 조회 도구를 추가합니다.
     if (jiraIssueKey) {
       toolCalls.push(
-        client.callTool({
+        mcpClient.callTool({
           name: "getJiraIssue",
           arguments: {
             issueKey: jiraIssueKey,
@@ -96,7 +96,7 @@ try {
     // 브랜치를 입력하지 않았다면
     // 현재 작업 폴더의 미커밋 변경사항을 조회합니다.
     rawToolResults = [
-      await client.callTool({
+      await mcpClient.callTool({
         name: "gitReviewContext",
         arguments: {},
       }),
@@ -177,5 +177,5 @@ try {
   console.error(`리뷰 실행에 실패했습니다: ${message}`);
   process.exitCode = 1;
 } finally {
-  await client.close();
+  await mcpClient.close();
 }
