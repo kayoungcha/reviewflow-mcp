@@ -52,6 +52,38 @@ try {
       console.log(item.text);
     }
   }
+
+  const rawGitHubPullRequestResult = await mcpClient.callTool({
+    name: "githubPullRequestContext",
+
+    arguments: {
+      repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+      pullNumber: 10,
+    },
+  });
+
+  // MCP 호출 결과는 타입상 unknown일 수 있으므로
+  // SDK가 제공하는 스키마로 실제 결과 형식을 검사합니다.
+  const githubPullRequestResult = CallToolResultSchema.parse(
+    rawGitHubPullRequestResult,
+  );
+
+  const githubPullRequestText = githubPullRequestResult.content
+    .map((item) => {
+      return item.type === "text" ? item.text : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  if (githubPullRequestResult.isError) {
+    throw new Error(
+      githubPullRequestText ||
+        "GitHub Pull Request 조회 도구 호출에 실패했습니다.",
+    );
+  }
+
+  console.log("\n=== GitHub Pull Request 호출 결과 ===");
+  console.log(githubPullRequestText);
 } catch (error) {
   console.error("HTTP MCP 테스트에 실패했습니다:", error);
   process.exitCode = 1;

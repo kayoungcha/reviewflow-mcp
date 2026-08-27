@@ -6,10 +6,9 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { extractJiraText } from "./review-orchestrator/extractJiraText.js";
-
+import { registerGitHubTools } from "./tools/github-tools.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const repositoryRoot = __dirname;
 
 function runGit(args: string[]): string {
@@ -124,7 +123,6 @@ export function createReviewFlowMcpServer(): McpServer {
       }
     },
   );
-
   /* --- 연습용 tools 끝  ---*/
 
   // 본격 git, jira mcp 연결용
@@ -596,5 +594,6 @@ export function createReviewFlowMcpServer(): McpServer {
       }
     },
   );
+  registerGitHubTools(mcpServer);
   return mcpServer;
 }
