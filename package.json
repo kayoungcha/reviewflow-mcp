@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test review-orchestrator/*.test.ts",
     "mcp:http": "node --env-file=.env --import tsx server-http.ts",
-    "mcp:http:test": "node --env-file=.env --import tsx http-client-test.ts"
+    "mcp:http:test": "node --env-file=.env --import tsx http-client-test.ts",
+    "start": "node --import tsx server-http.ts"
   },
   "keywords": [],
   "author": "",

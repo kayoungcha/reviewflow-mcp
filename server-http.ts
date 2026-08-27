@@ -3,8 +3,12 @@ import { createReviewFlowMcpServer } from "./mcp-server.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
-const host = "127.0.0.1";
-const port = 5200;
+// 127.0.0.1은 내 Mac 내부에서만 접근할 수 있습니다.
+// 0.0.0.0은 배포 서버 외부에서 들어오는 요청도 받을 수 있습니다.
+const host = "0.0.0.0";
+// 배포 서비스가 PORT 환경변수를 제공하면 그 값을 사용합니다.
+// 로컬에서 실행할 때 PORT가 없다면 기존 5200번을 사용합니다.
+const port = Number(process.env.PORT ?? 5200);
 const app = createMcpExpressApp({ host });
 
 const mcpApiToken = process.env.MCP_API_TOKEN;
@@ -45,7 +49,6 @@ app.use("/mcp", (request, response, next) => {
 
 app.post("/mcp", async (request, response) => {
   const mcpServer = createReviewFlowMcpServer();
-
   const httpTransport = new StreamableHTTPServerTransport();
 
   response.on("close", () => {
@@ -96,7 +99,7 @@ app.delete("/mcp", (request, response) => {
 
 // 실제 HTTP 포트를 열고 요청을 기다립니다.
 app.listen(port, host, () => {
-  console.log(`ReviewFlow MCP HTTP server started`);
-  console.log(`Health check: http://${host}:${port}/health`);
-  console.log(`MCP endpoint: http://${host}:${port}/mcp`);
+  console.log("ReviewFlow MCP HTTP server started");
+  console.log(`Health check: http://127.0.0.1:${port}/health`);
+  console.log(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
 });
