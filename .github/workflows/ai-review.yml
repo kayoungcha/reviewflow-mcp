@@ -23,6 +23,8 @@ permissions:
 
 jobs:
   review:
+    if: github.event.pull_request.draft == false
+
     # GitHub가 제공하는 Ubuntu 컴퓨터에서 실행합니다.
     runs-on: ubuntu-latest
 
