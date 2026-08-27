@@ -6,10 +6,17 @@ on:
       - opened
       - reopened
       - synchronize
+      - ready_for_review
+
+concurrency:
+  group: jira-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   move-jira-to-review:
-    if: github.event.pull_request.base.ref == 'main'
+    if: >
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.draft == false
     runs-on: ubuntu-latest
 
     steps:
@@ -85,6 +92,20 @@ jobs:
             jq -r '.fields.status.id // empty' jira-issue.json
           )"
 
+          # 현재 상태가 완료 계열인지 확인합니다.
+          CURRENT_STATUS_CATEGORY="$(
+            jq -r '.fields.status.statusCategory.key // empty' jira-issue.json
+          )"
+
+          echo "현재 Jira 상태 분류: $CURRENT_STATUS_CATEGORY"
+
+          # 완료된 티켓은 검토 중으로 되돌리지 않습니다.
+
+          if [ "$CURRENT_STATUS_CATEGORY" = "done" ]; then
+            echo "::error::완료된 Jira 티켓은 검토 중으로 되돌릴 수 없습니다: $ISSUE_KEY"
+            exit 1
+          fi
+
           echo "현재 Jira 상태 ID: $CURRENT_STATUS_ID"
           echo "검토 중 상태 ID: $REVIEW_STATUS_ID"
 
@@ -150,3 +171,87 @@ jobs:
             "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions"
 
           echo "Jira 티켓을 검토 중 상태로 변경했습니다: $ISSUE_KEY"
+
+      - name: Jira에 PR 재개 댓글 작성
+        if: >
+          success() &&
+          github.event.action == 'reopened' &&
+          steps.jira.outputs.issue_key != ''
+
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+          ISSUE_KEY: ${{ steps.jira.outputs.issue_key }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REOPENED_BY: ${{ github.actor }}
+
+        run: |
+          JIRA_BASE_URL="${JIRA_BASE_URL%/}"
+
+          jq -n \
+            --arg number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg reopenedBy "$REOPENED_BY" '
+            {
+              body: {
+                type: "doc",
+                version: 1,
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [
+                      {
+                        type: "text",
+                        text: "종료되었던 Pull Request가 다시 열렸습니다."
+                      }
+                    ]
+                  },
+                  {
+                    type: "paragraph",
+                    content: [
+                      {
+                        type: "text",
+                        text: ("PR: #" + $number + " " + $title)
+                      }
+                    ]
+                  },
+                  {
+                    type: "paragraph",
+                    content: [
+                      {
+                        type: "text",
+                        text: ("재개한 사람: " + $reopenedBy)
+                      }
+                    ]
+                  },
+                  {
+                    type: "paragraph",
+                    content: [
+                      {
+                        type: "text",
+                        text: ("PR 주소: " + $url)
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ' > jira-comment.json
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --user "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            --request POST \
+            --header "Accept: application/json" \
+            --header "Content-Type: application/json" \
+            --data @jira-comment.json \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/comment"
+
+          echo "Jira 티켓에 PR 재개 댓글을 작성했습니다: $ISSUE_KEY"
