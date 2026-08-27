@@ -1,14 +1,16 @@
 {
-  "name": "hello-mcp",
+  "name": "reviewflow-mcp",
   "version": "1.0.0",
-  "description": "",
+  "description": "MCP 기반 Git, Jira 및 AI 코드 리뷰 자동화 서버",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "review": "node --env-file=.env --import tsx review-orchestrator/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test review-orchestrator/*.test.ts"
+    "test": "tsx --test review-orchestrator/*.test.ts",
+    "mcp:http": "node --env-file=.env --import tsx server-http.ts",
+    "mcp:http:test": "node --env-file=.env --import tsx http-client-test.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +22,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.1.2",
     "prettier": "^3.9.6",
     "tsx": "^4.23.5",
