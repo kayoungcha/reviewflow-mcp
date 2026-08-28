@@ -11,8 +11,23 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { judge } from "./judge.js";
-import { shouldFailReview } from "./review-utils.js";
+import {
+  extractJiraIssueKey,
+  extractMcpTextContent,
+  shouldFailReview,
+} from "./review-utils.js";
+import { z } from "zod";
 
+// githubPullRequestContext가 반환하는 구조화된 결과 형식입니다.
+const GitHubPullRequestStructuredContentSchema = z.object({
+  repository: z.string(),
+  pullNumber: z.number().int().positive(),
+  title: z.string(),
+  baseBranch: z.string(),
+  targetBranch: z.string(),
+  url: z.url(),
+  reviewContext: z.string(),
+});
 // pnpm에서 전달된 -- 구분자를 제외하고 실제 인자만 가져온다.
 const argumentStartIndex = process.argv[2] === "--" ? 3 : 2;
 
@@ -84,12 +99,7 @@ try {
 
   const toolResult = CallToolResultSchema.parse(rawToolResult);
 
-  const reviewContext = toolResult.content
-    .map((item) => {
-      return item.type === "text" ? item.text : "";
-    })
-    .filter(Boolean)
-    .join("\n");
+  const reviewContext = extractMcpTextContent(toolResult.content);
 
   if (toolResult.isError) {
     throw new Error(
@@ -101,24 +111,81 @@ try {
     throw new Error("리뷰할 Pull Request 정보가 없습니다.");
   }
 
+  // MCP 서버가 반환한 structuredContent를 실제 형식과 비교해 검사합니다.
+  const pullRequestData = GitHubPullRequestStructuredContentSchema.parse(
+    toolResult.structuredContent,
+  );
+
+  // 작업 브랜치에서 Jira 티켓 키를 찾습니다.
+  const jiraIssueKey = extractJiraIssueKey(pullRequestData.targetBranch);
+
+  console.log(`작업 브랜치: ${pullRequestData.targetBranch}`);
+
+  let jiraContext = "";
+
+  if (jiraIssueKey) {
+    console.log(`연결된 Jira 티켓: ${jiraIssueKey}`);
+    const rawJiraToolResult = await mcpClient.callTool({
+      name: "getJiraIssue",
+      arguments: {
+        issueKey: jiraIssueKey,
+      },
+    });
+
+    // Jira 도구 결과도 MCP 표준 형식인지 검사합니다.
+    const jiraToolResult = CallToolResultSchema.parse(rawJiraToolResult);
+
+    // Jira 결과에서 text 콘텐츠만 합칩니다.
+    jiraContext = extractMcpTextContent(jiraToolResult.content);
+
+    if (jiraToolResult.isError) {
+      throw new Error(jiraContext || "Jira 티켓 정보를 조회하지 못했습니다.");
+    }
+
+    if (jiraContext) {
+      console.log("Jira 티켓 정보를 가져왔습니다.");
+    } else {
+      console.log(
+        "연결된 Jira 티켓을 찾지 못해 GitHub Pull Request만 리뷰합니다.",
+      );
+    }
+  } else {
+    console.log("작업 브랜치에서 Jira 티켓 키를 찾지 못했습니다.");
+  }
+
   console.log("GitHub Pull Request 정보를 가져왔습니다.");
   console.log("OpenAI 코드 리뷰를 시작합니다.");
 
   const { reviewByCodex } = await import("./codex.js");
 
-  // 이번 원격 리뷰에는 GitHub Pull Request 정보만 포함됩니다.
-  // PR 제목이나 브랜치에 Jira 형식의 키가 있더라도
-  // 실제 Jira 조회 결과로 간주하지 않도록 출처를 명확히 표시합니다.
+  // GitHub Pull Request 정보와 실제 Jira 조회 결과를 구분하도록
+  // OpenAI에 각 데이터의 출처를 명확히 알려줍니다.
+  const sourceGuide = jiraContext
+    ? [
+        "=== 입력 데이터 출처 안내 ===",
+        "입력에는 GitHub Pull Request 정보와 실제 Jira 조회 결과가 포함되어 있습니다.",
+        "'=== Jira 티켓 ==='로 시작하는 영역만 Jira 조회 결과입니다.",
+        "PR 제목이나 브랜치의 티켓 키만으로 Jira 내용을 추측하지 마세요.",
+        "GitHub PR, 실제 변경사항, Jira 요구사항을 서로 비교하세요.",
+        "=== 입력 데이터 출처 안내 끝 ===",
+      ].join("\n")
+    : [
+        "=== 입력 데이터 출처 안내 ===",
+        "아래 정보는 GitHub Pull Request에서 조회한 데이터입니다.",
+        "Jira 티켓 정보는 제공되지 않았습니다.",
+        "PR 제목, 본문 또는 브랜치에 포함된 티켓 키를 Jira 조회 결과로 간주하지 마세요.",
+        "jiraSummary는 반드시 null로 반환하세요.",
+        "=== 입력 데이터 출처 안내 끝 ===",
+      ].join("\n");
+
+  // GitHub PR 컨텍스트와 Jira 컨텍스트를 구분해 합칩니다.
   const openAiReviewContext = [
-    "=== 입력 데이터 출처 안내 ===",
-    "아래 정보는 GitHub Pull Request에서 조회한 데이터입니다.",
-    "Jira 티켓 정보는 제공되지 않았습니다.",
-    "PR 제목, 본문 또는 브랜치에 포함된 티켓 키를 Jira 조회 결과로 간주하지 마세요.",
-    "jiraSummary는 반드시 null로 반환하세요.",
-    "=== 입력 데이터 출처 안내 끝 ===",
-    "",
-    reviewContext,
-  ].join("\n");
+    sourceGuide,
+    pullRequestData.reviewContext,
+    jiraContext,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const review = await reviewByCodex(openAiReviewContext);
 

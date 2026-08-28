@@ -28,6 +28,18 @@ export function registerGitHubTools(mcpServer: McpServer): void {
           .describe("조회할 Pull Request 번호"),
       },
 
+      // MCP 클라이언트가 문자열을 다시 해석하지 않아도 되도록
+      // 프로그램이 읽을 수 있는 결과 형식을 정의합니다.
+
+      outputSchema: {
+        repository: z.string(),
+        pullNumber: z.number().int().positive(),
+        title: z.string(),
+        baseBranch: z.string(),
+        targetBranch: z.string(),
+        url: z.url(),
+        reviewContext: z.string(),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -87,8 +99,7 @@ export function registerGitHubTools(mcpServer: McpServer): void {
                 .join("\n\n--------------------\n\n")
             : "변경된 파일이 없습니다.";
 
-        // 현재는 GitHub API 첫 페이지에서 최대 100개 파일을 가져옵니다.
-
+        // GitHub API를 통해 최대 3,000개의 변경 파일을 가져옵니다.
         const notFetchedFileCount = Math.max(
           pullRequest.totalChangedFiles - pullRequest.files.length,
           0,
@@ -139,12 +150,23 @@ export function registerGitHubTools(mcpServer: McpServer): void {
         ].join("\n");
 
         return {
+          // 사람과 AI가 읽는 기존 텍스트 결과입니다.
           content: [
             {
               type: "text",
               text,
             },
           ],
+          // 다른 프로그램이 안정적으로 읽는 구조화된 결과
+          structuredContent: {
+            repository: `${owner}/${repository}`,
+            pullNumber: pullRequest.number,
+            title: pullRequest.title,
+            baseBranch: pullRequest.baseBranch,
+            targetBranch: pullRequest.targetBranch,
+            url: pullRequest.url,
+            reviewContext: text,
+          },
         };
       } catch (error: unknown) {
         const message =

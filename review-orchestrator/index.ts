@@ -34,6 +34,7 @@ const transport = new StdioClientTransport({
 
 try {
   await mcpClient.connect(transport);
+  // 터미널에서 전달된 실행 인자를 가져옵니다.
   const argumentStartIndex = process.argv[2] === "--" ? 3 : 2;
 
   // 실제 사용자가 입력한 브랜치 값만 가져옵니다.
@@ -74,7 +75,6 @@ try {
         },
       }),
     ];
-
     // 브랜치명에서 Jira 티켓 키를 찾은 경우에만
     // Jira 티켓 조회 도구를 추가합니다.
     if (jiraIssueKey) {
