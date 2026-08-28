@@ -389,10 +389,8 @@ export function createReviewFlowMcpServer(): McpServer {
     async ({ baseBranch, targetBranch }) => {
       try {
         // 기준 브랜치가 실제로 존재하는지 확인합니다.
-        //
         // ^{commit}은 입력값이 실제 커밋을 가리키는지 검사합니다.
         runGit(["rev-parse", "--verify", `${baseBranch}^{commit}`]);
-
         // 비교 대상 브랜치도 실제로 존재하는지 확인합니다.
         runGit(["rev-parse", "--verify", `${targetBranch}^{commit}`]);
 

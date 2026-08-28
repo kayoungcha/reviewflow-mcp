@@ -19,3 +19,15 @@ export function extractJiraIssueKey(branchName: string): string | null {
 export function shouldFailReview(verdict: ReviewVerdict): boolean {
   return verdict === "수정 필요";
 }
+
+// MCP 도구 결과에서 text 콘텐츠만 추출해 하나의 문자열로 합친다.
+export function extractMcpTextContent(
+  content: readonly { type: string; text?: string }[],
+): string {
+  return content
+    .map((item) => {
+      return item.type === "text" ? (item.text ?? "") : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
