@@ -1,0 +1,185 @@
+name: ReviewFlow AI Code Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: reviewflow-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Draft PR과 외부 fork PR에서는 실행하지 않습니다.
+    if: >
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    runs-on: ubuntu-latest
+
+    env:
+      REVIEWFLOW_API_URL: https://reviewflow-mcp.onrender.com/reviews/github
+      REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+
+    steps:
+      - name: Call ReviewFlow API
+        env:
+          REVIEWFLOW_API_TOKEN: ${{ secrets.REVIEWFLOW_API_TOKEN }}
+
+        run: |
+          set -euo pipefail
+
+          HTTP_STATUS="$(
+            curl \
+              --silent \
+              --show-error \
+              --connect-timeout 20 \
+              --max-time 180 \
+              --output review-result.json \
+              --write-out "%{http_code}" \
+              --request POST \
+              --header "Authorization: Bearer $REVIEWFLOW_API_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$(
+                jq -n \
+                  --arg repositoryUrl "$REPOSITORY_URL" \
+                  --argjson pullNumber "$PR_NUMBER" \
+                  '{
+                    repositoryUrl: $repositoryUrl,
+                    pullNumber: $pullNumber
+                  }'
+              )" \
+              "$REVIEWFLOW_API_URL"
+          )"
+
+          echo "ReviewFlow API HTTP 상태: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "::error::ReviewFlow API 호출에 실패했습니다."
+            cat review-result.json
+            exit 1
+          fi
+
+          jq -e '
+            .reviewer
+            and .summary
+            and (.positives | type == "array")
+            and (.issues | type == "array")
+            and .verdict
+          ' review-result.json > /dev/null
+
+      - name: Create review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+        run: |
+          set -euo pipefail
+
+          COMMENT_MARKER="<!-- reviewflow-ai-review -->"
+
+          {
+            echo "$COMMENT_MARKER"
+            echo "## ReviewFlow AI Code Review"
+            echo
+            echo "### 최종 판정"
+            jq -r '.verdict' review-result.json
+            echo
+            echo "### Jira 티켓 요약"
+            jq -r '.jiraSummary // "연결된 Jira 티켓 없음"' review-result.json
+            echo
+            echo "### 코드 리뷰"
+            jq -r '.summary' review-result.json
+            echo
+            echo "### 👍 장점"
+
+            if [ "$(jq '.positives | length' review-result.json)" -eq 0 ]; then
+              echo "- 없음"
+            else
+              jq -r '.positives[] | "- \(.)"' review-result.json
+            fi
+
+            echo
+            echo "### ⚠️ 개선점"
+
+            if [ "$(jq '.issues | length' review-result.json)" -eq 0 ]; then
+              echo "- 없음"
+            else
+              jq -r '.issues[] | "- \(.)"' review-result.json
+            fi
+          } > review-comment.md
+
+          mapfile -t COMMENT_IDS < <(
+            gh api \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+              --jq 'map(
+                select(
+                  .user.login == "github-actions[bot]"
+                  and (.body | contains("<!-- reviewflow-ai-review -->"))
+                )
+              )
+              | sort_by(.updated_at)
+              | reverse
+              | .[].id'
+          )
+
+          COMMENT_ID="${COMMENT_IDS[0]:-}"
+
+          if [ -n "$COMMENT_ID" ]; then
+            echo "기존 ReviewFlow 댓글을 갱신합니다."
+
+            gh api \
+              --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" \
+              -F body=@review-comment.md
+
+            for DUPLICATE_COMMENT_ID in "${COMMENT_IDS[@]:1}"; do
+              echo "중복 ReviewFlow 댓글을 삭제합니다: $DUPLICATE_COMMENT_ID"
+
+              gh api \
+                --method DELETE \
+                "repos/$GITHUB_REPOSITORY/issues/comments/$DUPLICATE_COMMENT_ID"
+            done
+          else
+            echo "새 ReviewFlow 댓글을 생성합니다."
+
+            gh api \
+              --method POST \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -F body=@review-comment.md
+          fi
+
+      - name: Apply review verdict
+        run: |
+          set -euo pipefail
+
+          VERDICT="$(jq -r '.verdict' review-result.json)"
+
+          case "$VERDICT" in
+            "통과")
+              echo "ReviewFlow 최종 판정: 통과"
+              ;;
+
+            "수정 권장")
+              echo "::warning::ReviewFlow 최종 판정: 수정 권장"
+              ;;
+
+            "수정 필요")
+              echo "::error::ReviewFlow 최종 판정: 수정 필요"
+              exit 1
+              ;;
+
+            *)
+              echo "::error::알 수 없는 ReviewFlow 판정입니다: $VERDICT"
+              exit 1
+              ;;
+          esac
