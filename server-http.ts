@@ -2,6 +2,11 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express";
 import { createReviewFlowMcpServer } from "./mcp-server.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import {
+  GitHubReviewRequestSchema,
+  hasValidReviewApiToken,
+} from "./review-api.js";
+import { reviewGitHubPullRequest } from "./review-orchestrator/github-review-service.js";
 
 // 127.0.0.1은 내 Mac 내부에서만 접근할 수 있습니다.
 // 0.0.0.0은 배포 서버 외부에서 들어오는 요청도 받을 수 있습니다.
@@ -12,6 +17,7 @@ const port = Number(process.env.PORT ?? 5200);
 const app = createMcpExpressApp({ host });
 
 const mcpApiToken = process.env.MCP_API_TOKEN;
+const reviewFlowApiToken = process.env.REVIEWFLOW_API_TOKEN;
 
 app.get("/health", (_request, response) => {
   response.status(200).json({
@@ -24,6 +30,61 @@ app.get("/health", (_request, response) => {
 if (!mcpApiToken) {
   throw new Error("MCP_API_TOKEN 환경변수가 필요합니다.");
 }
+
+if (!reviewFlowApiToken) {
+  throw new Error("REVIEWFLOW_API_TOKEN 환경변수가 필요합니다.");
+}
+
+app.post("/reviews/github", async (request, response) => {
+  const authorization = request.headers.authorization;
+
+  if (!hasValidReviewApiToken(authorization, reviewFlowApiToken)) {
+    response.status(401).json({
+      error: "올바른 ReviewFlow API 인증 토큰이 필요합니다.",
+    });
+
+    return;
+  }
+
+  // 요청 본문이 repositoryUrl과 pullNumber 형식에 맞는지 검사합니다.
+  const requestResult = GitHubReviewRequestSchema.safeParse(request.body);
+
+  if (!requestResult.success) {
+    response.status(400).json({
+      error: "GitHub 리뷰 요청 형식이 올바르지 않습니다.",
+      details: requestResult.error.issues.map((issue) => {
+        return {
+          path: issue.path.join("."),
+          message: issue.message,
+        };
+      }),
+    });
+
+    return;
+  }
+  try {
+    const review = await reviewGitHubPullRequest({
+      repositoryUrl: requestResult.data.repositoryUrl,
+      pullNumber: requestResult.data.pullNumber,
+      // 같은 서버의 MCP 엔드포인트를 내부적으로 호출합니다.
+      mcpServerUrl: `http://127.0.0.1:${port}/mcp`,
+      mcpApiToken,
+    });
+
+    response.status(200).json(review);
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "GitHub Pull Request 리뷰에 실패했습니다.";
+
+    console.error("GitHub 리뷰 API 처리에 실패했습니다.", error);
+
+    response.status(500).json({
+      error: message,
+    });
+  }
+});
 
 // /mcp로 들어오는 모든 요청의 인증 정보를 검사합니다.
 // /health는 이 검사를 거치지 않으므로 상태 확인은 계속 가능합니다.
@@ -102,4 +163,5 @@ app.listen(port, host, () => {
   console.log("ReviewFlow MCP HTTP server started");
   console.log(`Health check: http://127.0.0.1:${port}/health`);
   console.log(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
+  console.log(`Review API endpoint: http://127.0.0.1:${port}/reviews/github`);
 });
