@@ -66,6 +66,7 @@ app.post("/reviews/github", async (request, response) => {
     const review = await reviewGitHubPullRequest({
       repositoryUrl: requestResult.data.repositoryUrl,
       pullNumber: requestResult.data.pullNumber,
+      jiraProjectKey: requestResult.data.jiraProjectKey ?? null,
       // 같은 서버의 MCP 엔드포인트를 내부적으로 호출합니다.
       mcpServerUrl: `http://127.0.0.1:${port}/mcp`,
       mcpApiToken,

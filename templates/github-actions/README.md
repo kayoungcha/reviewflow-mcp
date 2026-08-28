@@ -63,17 +63,52 @@ Draft Pull Request와 외부 fork Pull Request에서는 실행하지 않습니�
 - `수정 권장`: 경고를 표시하지만 Check 성공
 - `수정 필요`: 리뷰 댓글 작성 후 Check 실패
 
-## Jira 연동
+## Jira 연동 — 선택 사항
 
-작업 브랜치 이름에 Jira 티켓 키가 있으면 Jira 요구사항을 함께 검토합니다.
+Jira를 사용하지 않는 프로젝트는 별도 설정 없이 GitHub Pull Request만 리뷰할 수 있습니다.
+Jira 요구사항을 함께 리뷰하려면 대상 저장소의 다음 화면으로 이동합니다.
 
 ```text
+Settings
+→ Secrets and variables
+→ Actions
+→ Variables
+→ New repository variable
+```
+
+다음 Repository Variable을 추가합니다.
+
+```text
+Name: REVIEWFLOW_JIRA_PROJECT_KEY
+Value: MCPTEST
+```
+
+`MCPTEST` 부분에는 연결할 Jira 프로젝트 키를 입력합니다.
+
+이 값은 인증 정보가 아니므로 Secret이 아닌 Repository Variable로 등록합니다. Jira 이메일과 API 토큰은 대상 저장소에 등록하지 않으며 중앙 ReviewFlow 서버에서만 관리합니다.
+Repository Variable이 설정되면 ReviewFlow는 작업 브랜치에서 같은 프로젝트의 Jira 티켓 키를 찾습니다.
+
+```text
+설정값: MCPTEST
+
 MCPTEST-20
 MCPTEST-20-fix
 feature/MCPTEST-20-review
 ```
 
-Jira 티켓 키가 없거나 연결된 Jira 정보가 없으면 GitHub Pull Request만 리뷰합니다.
+다른 프로젝트의 Jira 키는 조회하지 않습니다.
+
+```text
+설정값: MCPTEST
+작업 브랜치: OTHER-20-fix
+결과: Jira 조회 생략
+```
+
+다음 경우에는 Jira 조회를 생략하고 GitHub Pull Request만 리뷰합니다.
+
+- `REVIEWFLOW_JIRA_PROJECT_KEY`가 등록되지 않은 경우
+- 작업 브랜치에 Jira 티켓 키가 없는 경우
+- 브랜치의 Jira 프로젝트 키가 설정값과 일치하지 않는 경우
 
 ## 필요한 GitHub 권한
 

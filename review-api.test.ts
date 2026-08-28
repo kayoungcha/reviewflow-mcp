@@ -67,3 +67,32 @@ test("토큰이 없거나 올바르지 않으면 거부합니다.", () => {
     false,
   );
 });
+
+test("Jira 프로젝트 키가 없어도 GitHub 리뷰 요청을 허용합니다.", () => {
+  const result = GitHubReviewRequestSchema.parse({
+    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    pullNumber: 12,
+  });
+
+  assert.equal(result.jiraProjectKey, undefined);
+});
+
+test("Jira 프로젝트 키를 대문자로 정규화합니다.", () => {
+  const result = GitHubReviewRequestSchema.parse({
+    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    pullNumber: 12,
+    jiraProjectKey: "mcptest",
+  });
+
+  assert.equal(result.jiraProjectKey, "MCPTEST");
+});
+
+test("올바르지 않은 Jira 프로젝트 키를 거부합니다.", () => {
+  const result = GitHubReviewRequestSchema.safeParse({
+    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    pullNumber: 12,
+    jiraProjectKey: "MCP TEST!",
+  });
+
+  assert.equal(result.success, false);
+});
