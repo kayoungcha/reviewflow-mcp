@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "review": "node --env-file=.env --import tsx review-orchestrator/index.ts",
+    "review:github": "node --env-file=.env --import tsx review-orchestrator/github-review.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test review-orchestrator/*.test.ts github.test.ts",
     "mcp:http": "node --env-file=.env --import tsx server-http.ts",
