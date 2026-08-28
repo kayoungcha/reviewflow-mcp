@@ -37,13 +37,13 @@ export type GitHubPullRequestContext = {
 };
 
 // GitHub의 PR 변경 파일 API가 반환하는 파일 한개 형태
-type GitHubPullRequestFileResponse = {
+export type GitHubPullRequestFileResponse = {
   filename: string;
   status: string;
   additions: number;
   deletions: number;
   changes: number;
-  // 바이너리 파일이나 너무 큰 벼경에서는 patch가 없을 수있습니다.
+  // 바이너리 파일이나 너무 큰 변경에서는 patch가 없을 수있습니다.
   patch?: string;
 };
 
@@ -56,6 +56,55 @@ export type GitHubPullRequestFileContext = {
   changes: number;
   patch: string;
 };
+
+// GitHub 변경 파일 API가 한 페이지에서 제공하는 최대 파일 수입니다.
+const GITHUB_FILES_PER_PAGE = 100;
+// GitHub 변경 파일 API가 제공하는 최대 파일 수는 3,000개 이므로
+// 최대 30페이지까지만 조회합니다.
+const GITHUB_MAX_FILE_PAGES = 30;
+
+type FetchGitHubFilesPage = (
+  page: number,
+) => Promise<GitHubPullRequestFileResponse[]>;
+
+// 여러 페이지의 GitHub 변경 파일을 하나의 배열로 합칩니다.
+export async function collectGitHubPullRequestFiles(
+  fetchPage: FetchGitHubFilesPage,
+  totalChangedFiles: number,
+): Promise<GitHubPullRequestFileResponse[]> {
+  // GitHub API가 제공할 수 있는 최대 3,000개까지만 목표로 합니다.
+  const expectedFileCount = Math.min(
+    Math.max(Math.trunc(totalChangedFiles), 0),
+    GITHUB_FILES_PER_PAGE * GITHUB_MAX_FILE_PAGES,
+  );
+
+  if (expectedFileCount === 0) {
+    return [];
+  }
+
+  const filesByFilename = new Map<string, GitHubPullRequestFileResponse>();
+
+  for (let page = 1; page <= GITHUB_MAX_FILE_PAGES; page += 1) {
+    const pageFiles = await fetchPage(page);
+
+    for (const file of pageFiles) {
+      filesByFilename.set(file.filename, file);
+    }
+
+    // PR 정보에 표시된 전체 파일 수만큼 모았다면 종료합니다.
+    if (filesByFilename.size >= expectedFileCount) {
+      break;
+    }
+
+    // 한 페이지에서 100개보다 적게 반환됐다면
+    // 해당 페이지가 마지막 페이지이므로 종료합니다.
+    if (pageFiles.length < GITHUB_FILES_PER_PAGE) {
+      break;
+    }
+  }
+
+  return Array.from(filesByFilename.values()).slice(0, expectedFileCount);
+}
 
 // GitHub 저장소와 PR 번호를 받아 PR 정보를 조회합니다.
 export async function fetchGitHubPullRequest(
@@ -118,27 +167,41 @@ export async function fetchGitHubPullRequest(
 
   const pullRequest = (await response.json()) as GitHubPullRequestResponse;
 
-  const filesApiUrl = `${apiUrl}/files?per_page=100`;
-  const filesResponse = await fetch(filesApiUrl, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${githubToken}`,
-      "X-GitHub-Api-Version": "2026-03-10",
-      "User-Agent": "reviewflow-mcp",
+  const githubFiles = await collectGitHubPullRequestFiles(
+    async (page) => {
+      const filesApiUrl =
+        `${apiUrl}/files` +
+        `?per_page=${GITHUB_FILES_PER_PAGE}` +
+        `&page=${page}`;
+
+      try {
+        const filesResponse = await fetch(filesApiUrl, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${githubToken}`,
+            "X-GitHub-Api-Version": "2026-03-10",
+            "User-Agent": "reviewflow-mcp",
+          },
+          signal: AbortSignal.timeout(10_000),
+        });
+        // fetch는 404나 500에서도 자동으로 실패하지 않으므로
+        // 각 페이지 응답 상태를 직접 검사합니다.
+        if (!filesResponse.ok) {
+          throw new Error(`HTTP 상태: ${filesResponse.status}`);
+        }
+        return (await filesResponse.json()) as GitHubPullRequestFileResponse[];
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "알 수 없는 오류";
+
+        throw new Error(
+          `GitHub PR 변경 파일 ${page}페이지 조회에 실패했습니다: ${message}`,
+        );
+      }
     },
-  });
-
-  // fetch는 404나 500에서도 자동으로 실패하지 않으므로
-  // 변경 파일 요청도 직접 상태를 검사합니다.
-  if (!filesResponse.ok) {
-    throw new Error(
-      `GitHub PR 변경 파일 조회에 실패했습니다. HTTP 상태: ${filesResponse.status}`,
-    );
-  }
-
-  // GitHub가 반환한 변경 파일 배열을 읽습니다.
-  const githubFiles =
-    (await filesResponse.json()) as GitHubPullRequestFileResponse[];
+    // PR 기본 정보에 포함된 전체 변경 파일 수를 전달합니다.
+    pullRequest.changed_files,
+  );
 
   // GitHub 원본 데이터에서 리뷰에 필요한 값만 정리합니다.
   const files: GitHubPullRequestFileContext[] = githubFiles.map((file) => {
