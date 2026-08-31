@@ -69,7 +69,9 @@ jobs:
                       }
                     end
                   )'
-              )" \
+                 )" \
+                 "$REVIEWFLOW_API_URL"
+               )"
               
           echo "ReviewFlow API HTTP 상태: $HTTP_STATUS"
 
