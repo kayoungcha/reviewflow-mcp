@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   extractJiraIssueKey,
+  extractJiraIssueKeyForProject,
   extractMcpTextContent,
   shouldFailReview,
 } from "./review-utils.js";
@@ -53,4 +54,32 @@ test("MCP 결과에 text 콘텐츠가 없으면 빈 문자열을 반환합니다
   const result = extractMcpTextContent([{ type: "image" }]);
 
   assert.equal(result, "");
+});
+
+test("설정한 Jira 프로젝트에 해당하는 티켓 키를 추출합니다.", () => {
+  assert.equal(
+    extractJiraIssueKeyForProject("feature/MCPTEST-20-jira-config", "MCPTEST"),
+    "MCPTEST-20",
+  );
+});
+
+test("다른 Jira 프로젝트의 티켓 키는 추출하지 않습니다.", () => {
+  assert.equal(
+    extractJiraIssueKeyForProject("feature/OTHER-20-jira-config", "MCPTEST"),
+    null,
+  );
+});
+
+test("브랜치에 Jira 티켓 키가 없으면 null을 반환합니다.", () => {
+  assert.equal(
+    extractJiraIssueKeyForProject("feature/add-login", "MCPTEST"),
+    null,
+  );
+});
+
+test("설정한 Jira 프로젝트 키의 대소문자를 구분하지 않습니다.", () => {
+  assert.equal(
+    extractJiraIssueKeyForProject("feature/MCPTEST-20-fix", "mcptest"),
+    "MCPTEST-20",
+  );
 });

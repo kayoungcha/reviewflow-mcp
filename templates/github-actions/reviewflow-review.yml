@@ -35,6 +35,7 @@ jobs:
       - name: Call ReviewFlow API
         env:
           REVIEWFLOW_API_TOKEN: ${{ secrets.REVIEWFLOW_API_TOKEN }}
+          JIRA_PROJECT_KEY: ${{ vars.REVIEWFLOW_JIRA_PROJECT_KEY }}
 
         run: |
           set -euo pipefail
@@ -54,14 +55,24 @@ jobs:
                 jq -n \
                   --arg repositoryUrl "$REPOSITORY_URL" \
                   --argjson pullNumber "$PR_NUMBER" \
+                  --arg jiraProjectKey "$JIRA_PROJECT_KEY" \
                   '{
                     repositoryUrl: $repositoryUrl,
                     pullNumber: $pullNumber
-                  }'
-              )" \
-              "$REVIEWFLOW_API_URL"
-          )"
-
+                  }
+                  + (
+                    if $jiraProjectKey == "" then
+                      {}
+                    else
+                      {
+                        jiraProjectKey: $jiraProjectKey
+                      }
+                    end
+                  )'
+                 )" \
+                 "$REVIEWFLOW_API_URL"
+               )"
+              
           echo "ReviewFlow API HTTP 상태: $HTTP_STATUS"
 
           if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then

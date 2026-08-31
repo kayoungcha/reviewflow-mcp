@@ -4,7 +4,11 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import { extractJiraIssueKey, extractMcpTextContent } from "./review-utils.js";
+import {
+  extractJiraIssueKey,
+  extractJiraIssueKeyForProject,
+  extractMcpTextContent,
+} from "./review-utils.js";
 import type { ReviewResult } from "./types.js";
 
 // 재사용 가능한 원격 GitHub PR 리뷰 함수가 받을 입력값입니다.
@@ -13,6 +17,10 @@ export interface ReviewGitHubPullRequestOptions {
   pullNumber: number;
   mcpServerUrl: string;
   mcpApiToken: string;
+  // undefined: 기존 CLI 자동 조회
+  // null: Jira 조회 비활성화
+  // string: 지정한 Jira 프로젝트만 조회
+  jiraProjectKey?: string | null;
 }
 
 // githubPullRequestContext가 반환하는 구조화된 결과 형식입니다.
@@ -140,9 +148,23 @@ export async function reviewGitHubPullRequest(
       toolResult.structuredContent,
     );
 
-    // 작업 브랜치에서 Jira 티켓 키를 찾습니다.
-    const jiraIssueKey = extractJiraIssueKey(pullRequestData.targetBranch);
+    // Jira 설정 방식에 따라 작업 브랜치에서 티켓 키를 찾습니다.
+    let jiraIssueKey: string | null = null;
 
+    if (options.jiraProjectKey === undefined) {
+      // 기존 CLI 호출은 Jira 프로젝트 설정을 전달하지 않으므로
+      // 기존처럼 브랜치에 포함된 Jira 키를 자동으로 찾습니다.
+      jiraIssueKey = extractJiraIssueKey(pullRequestData.targetBranch);
+    } else if (options.jiraProjectKey !== null) {
+      // HTTP API에서 Jira 프로젝트가 설정된 경우에는
+      // 해당 프로젝트에 속하는 티켓만 찾습니다.
+      jiraIssueKey = extractJiraIssueKeyForProject(
+        pullRequestData.targetBranch,
+        options.jiraProjectKey,
+      );
+    }
+
+    // jiraProjectKey가 null이면 Jira 조회를 하지 않습니다.
     let jiraContext = "";
 
     // Jira 티켓 키가 있는 경우에만 Jira 도구를 호출합니다.
