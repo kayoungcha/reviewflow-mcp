@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  GitHubReviewRequestSchema,
-  hasValidReviewApiToken,
-} from "./review-api.js";
+import { GitHubReviewRequestSchema, extractBearerToken } from "./review-api.js";
 
 test("올바른 GitHub 리뷰 요청을 허용합니다.", () => {
   const result = GitHubReviewRequestSchema.parse({
@@ -53,19 +50,30 @@ test("예상하지 않은 요청 속성을 거부합니다.", () => {
   assert.equal(result.success, false);
 });
 
-test("올바른 ReviewFlow API 토큰을 허용합니다.", () => {
+test("Authorization 헤더에서 Bearer 토큰을 추출합니다.", () => {
   assert.equal(
-    hasValidReviewApiToken("Bearer secret-token", "secret-token"),
-    true,
+    extractBearerToken("Bearer github-oidc-token"),
+    "github-oidc-token",
   );
 });
 
-test("토큰이 없거나 올바르지 않으면 거부합니다.", () => {
-  assert.equal(hasValidReviewApiToken(undefined, "secret-token"), false);
+test("Bearer의 대소문자를 구분하지 않습니다.", () => {
   assert.equal(
-    hasValidReviewApiToken("Bearer wrong-token", "secret-token"),
-    false,
+    extractBearerToken("bearer github-oidc-token"),
+    "github-oidc-token",
   );
+});
+
+test("Authorization 헤더가 없으면 null을 반환합니다.", () => {
+  assert.equal(extractBearerToken(undefined), null);
+});
+
+test("Bearer 형식이 아니면 null을 반환합니다.", () => {
+  assert.equal(extractBearerToken("Basic github-oidc-token"), null);
+});
+
+test("Bearer 뒤에 토큰이 없으면 null을 반환합니다.", () => {
+  assert.equal(extractBearerToken("Bearer   "), null);
 });
 
 test("Jira 프로젝트 키가 없어도 GitHub 리뷰 요청을 허용합니다.", () => {

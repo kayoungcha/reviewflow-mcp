@@ -24,25 +24,17 @@ Pull Request 생성 또는 push
 
 대상 저장소에 `.github/workflows` 폴더가 없다면 새로 만듭니다.
 
-## 2. Repository Secret 등록
+## 2. ReviewFlow 사용 저장소 등록
 
-대상 저장소의 다음 화면으로 이동합니다.
+대상 저장소에는 별도의 ReviewFlow 인증 Secret을 등록하지 않습니다.
 
-```text
-Settings
-→ Secrets and variables
-→ Actions
-→ New repository secret
-```
+GitHub Actions가 실행될 때 GitHub에서 발급하는 임시 OIDC 토큰으로 ReviewFlow API를 인증합니다. 따라서 대상 저장소마다 토큰을 생성하거나 관리할 필요가 없습니다.
 
-다음 Secret을 추가합니다.
+대신 중앙 ReviewFlow 서버의 `REVIEWFLOW_ALLOWED_REPOSITORIES` 환경변수에 사용할 저장소를 등록해야 합니다.
 
 ```text
-Name: REVIEWFLOW_API_TOKEN
-Secret: ReviewFlow 서버와 약속한 인증 토큰
+REVIEWFLOW_ALLOWED_REPOSITORIES=kayoungcha/MCP-test,kayoungcha/reviewflow-demo
 ```
-
-토큰은 워크플로 파일이나 저장소 코드에 직접 작성하지 않습니다.
 
 ## 3. Pull Request 생성
 
@@ -119,9 +111,10 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  id-token: write
 ```
 
-이 권한은 저장소 코드를 읽고 현재 PR에 ReviewFlow 댓글을 작성하는 데 사용합니다.
+이 권한은 저장소 코드를 읽고 현재 PR에 ReviewFlow 댓글을 작성하며, GitHub Actions 실행을 증명하는 임시 OIDC 토큰을 발급받는 데 사용합니다.
 
 ## 비공개 저장소
 
@@ -143,7 +136,18 @@ ReviewFlow는 다음 숨겨진 마커로 자동 리뷰 댓글을 구분합니다
 
 ### ReviewFlow API가 401을 반환하는 경우
 
-대상 저장소의 `REVIEWFLOW_API_TOKEN`과 중앙 ReviewFlow 서버의 토큰이 같은지 확인합니다.
+다음 항목을 확인합니다.
+
+- 워크플로의 `permissions`에 `id-token: write`가 있는지 확인합니다.
+- GitHub Actions가 발급한 OIDC 토큰을 `Authorization: Bearer ...` 헤더로 전달하는지 확인합니다.
+- OIDC 토큰의 발급자와 audience가 ReviewFlow 서버 설정과 일치하는지 확인합니다.
+
+### ReviewFlow API가 403을 반환하는 경우
+
+다음 항목을 확인합니다.
+
+- 대상 저장소가 중앙 ReviewFlow 서버의 `REVIEWFLOW_ALLOWED_REPOSITORIES`에 등록되어 있는지 확인합니다.
+- OIDC 토큰을 발급받은 저장소와 리뷰 요청에 포함된 저장소가 같은지 확인합니다.
 
 ### 저장소 또는 PR을 찾을 수 없는 경우
 
@@ -155,4 +159,4 @@ ReviewFlow는 다음 숨겨진 마커로 자동 리뷰 댓글을 구분합니다
 
 ### fork Pull Request에서 실행되지 않는 경우
 
-GitHub는 보안을 위해 fork Pull Request에 Repository Secret을 전달하지 않습니다. 현재 템플릿은 이러한 요청을 의도적으로 건너뜁니다.
+현재 템플릿은 외부 저장소에서 임의로 ReviewFlow API를 호출하는 것을 방지하기 위해 fork Pull Request를 의도적으로 건너뜁니다.

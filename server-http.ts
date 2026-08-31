@@ -2,10 +2,16 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express";
 import { createReviewFlowMcpServer } from "./mcp-server.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { GitHubReviewRequestSchema, extractBearerToken } from "./review-api.js";
+
 import {
-  GitHubReviewRequestSchema,
-  hasValidReviewApiToken,
-} from "./review-api.js";
+  assertGitHubRepositoryAccess,
+  parseAllowedRepositories,
+  verifyGitHubOidcToken,
+} from "./github-oidc.js";
+
+import { parseGitHubRepositoryUrl } from "./github.js";
+
 import { reviewGitHubPullRequest } from "./review-orchestrator/github-review-service.js";
 
 // 127.0.0.1은 내 Mac 내부에서만 접근할 수 있습니다.
@@ -17,7 +23,11 @@ const port = Number(process.env.PORT ?? 5200);
 const app = createMcpExpressApp({ host });
 
 const mcpApiToken = process.env.MCP_API_TOKEN;
-const reviewFlowApiToken = process.env.REVIEWFLOW_API_TOKEN;
+// 쉼표로 구분된 허용 저장소 환경변수를
+// 비교 가능한 Set 형태로 한 번만 변환합니다.
+const allowedRepositories = parseAllowedRepositories(
+  process.env.REVIEWFLOW_ALLOWED_REPOSITORIES,
+);
 
 app.get("/health", (_request, response) => {
   response.status(200).json({
@@ -31,16 +41,31 @@ if (!mcpApiToken) {
   throw new Error("MCP_API_TOKEN 환경변수가 필요합니다.");
 }
 
-if (!reviewFlowApiToken) {
-  throw new Error("REVIEWFLOW_API_TOKEN 환경변수가 필요합니다.");
-}
-
 app.post("/reviews/github", async (request, response) => {
-  const authorization = request.headers.authorization;
+  // Authorization 헤더에서 GitHub Actions OIDC JWT를 꺼냅니다.
 
-  if (!hasValidReviewApiToken(authorization, reviewFlowApiToken)) {
+  const oidcToken = extractBearerToken(request.headers.authorization);
+
+  if (oidcToken === null) {
     response.status(401).json({
-      error: "올바른 ReviewFlow API 인증 토큰이 필요합니다.",
+      error: "GitHub Actions OIDC 인증 토큰이 필요합니다.",
+    });
+
+    return;
+  }
+  let oidcRepository: string;
+
+  try {
+    // GitHub 공개 키를 사용해 JWT 서명, 발급자, audience와 만료시간을 검증합니다.
+    const identity = await verifyGitHubOidcToken(oidcToken);
+    oidcRepository = identity.repository;
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "알 수 없는 OIDC 인증 오류";
+
+    console.warn("GitHub Actions OIDC 인증에 실패했습니다.", message);
+    response.status(401).json({
+      error: "GitHub Actions OIDC 인증에 실패했습니다.",
     });
 
     return;
@@ -62,6 +87,51 @@ app.post("/reviews/github", async (request, response) => {
 
     return;
   }
+
+  let requestedRepository: string;
+
+  try {
+    // 전체 GitHub URL에서 owner/repository 형태를 만듭니다.
+    const parsedRepository = parseGitHubRepositoryUrl(
+      requestResult.data.repositoryUrl,
+    );
+
+    requestedRepository =
+      `${parsedRepository.owner}/` + `${parsedRepository.repository}`;
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "GitHub 저장소 주소가 올바르지 않습니다.";
+
+    response.status(400).json({
+      error: message,
+    });
+
+    return;
+  }
+
+  try {
+    // OIDC 신분증의 저장소와 요청 저장소가 같은지,
+    // Render 허용 목록에 있는 저장소인지 확인합니다.
+    assertGitHubRepositoryAccess({
+      oidcRepository,
+      requestedRepository,
+      allowedRepositories,
+    });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "ReviewFlow 사용 권한이 없습니다.";
+
+    response.status(403).json({
+      error: message,
+    });
+
+    return;
+  }
+
   try {
     const review = await reviewGitHubPullRequest({
       repositoryUrl: requestResult.data.repositoryUrl,
