@@ -55,20 +55,22 @@ jobs:
                 jq -n \
                   --arg repositoryUrl "$REPOSITORY_URL" \
                   --argjson pullNumber "$PR_NUMBER" \
+                  --arg jiraProjectKey "$JIRA_PROJECT_KEY" \
                   '{
                     repositoryUrl: $repositoryUrl,
                     pullNumber: $pullNumber
-                     + if $jiraProjectKey == ""
-                      then {}
-                      else {
+                  }
+                  + (
+                    if $jiraProjectKey == "" then
+                      {}
+                    else
+                      {
                         jiraProjectKey: $jiraProjectKey
                       }
-                      end'
-                  }'
+                    end
+                  )'
               )" \
-              "$REVIEWFLOW_API_URL"
-          )"
-
+              
           echo "ReviewFlow API HTTP 상태: $HTTP_STATUS"
 
           if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
