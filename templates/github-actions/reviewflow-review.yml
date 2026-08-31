@@ -12,6 +12,7 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  id-token: write
 
 concurrency:
   group: reviewflow-${{ github.event.pull_request.number }}
@@ -34,11 +35,33 @@ jobs:
     steps:
       - name: Call ReviewFlow API
         env:
-          REVIEWFLOW_API_TOKEN: ${{ secrets.REVIEWFLOW_API_TOKEN }}
           JIRA_PROJECT_KEY: ${{ vars.REVIEWFLOW_JIRA_PROJECT_KEY }}
 
         run: |
           set -euo pipefail
+
+          # GitHub Actions가 현재 실행을 증명하는 임시 OIDC 토큰을 발급받습니다.
+          OIDC_RESPONSE="$(
+            curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=reviewflow-mcp"
+          )"
+
+          OIDC_TOKEN="$(
+            printf '%s' "$OIDC_RESPONSE" |
+              jq -r '.value // empty'
+          )"
+
+          if [ -z "$OIDC_TOKEN" ]; then
+            echo "::error::GitHub OIDC 토큰을 발급받지 못했습니다."
+            exit 1
+          fi
+
+          # 이후 로그에서 OIDC 토큰이 노출되지 않도록 가립니다.
+          echo "::add-mask::$OIDC_TOKEN"
 
           HTTP_STATUS="$(
             curl \
@@ -49,7 +72,7 @@ jobs:
               --output review-result.json \
               --write-out "%{http_code}" \
               --request POST \
-              --header "Authorization: Bearer $REVIEWFLOW_API_TOKEN" \
+              --header "Authorization: Bearer $OIDC_TOKEN" \
               --header "Content-Type: application/json" \
               --data "$(
                 jq -n \

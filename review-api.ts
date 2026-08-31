@@ -23,11 +23,20 @@ export const GitHubReviewRequestSchema = z
   })
   .strict();
 
-//  요청의 Authorization 헤더가
-// ReviewFlow API 토큰과 일치하는지 확인합니다.
-export function hasValidReviewApiToken(
+// Authorization 헤더에서 Bearer 토큰을 추출합니다.
+export const extractBearerToken = (
   authorization: string | undefined,
-  expectedToken: string,
-): boolean {
-  return authorization === `Bearer ${expectedToken}`;
-}
+): string | null => {
+  if (!authorization) {
+    return null;
+  }
+
+  const match = /^Bearer\s+(.+)$/i.exec(authorization);
+  const token = match?.[1]?.trim();
+
+  if (!token) {
+    return null;
+  }
+
+  return token;
+};
