@@ -128,7 +128,17 @@ jobs:
             echo "## ReviewFlow AI Code Review"
             echo
             echo "### 최종 판정"
-            jq -r '.verdict' review-result.json
+            case "$(jq -r '.verdict' review-result.json)" in
+              "통과")
+                echo "✅ 통과"
+                ;;
+              "수정 권장")
+                echo "🟡 수정 권장"
+                ;;
+              "수정 필요")
+                echo "❌ 수정 필요"
+                ;;
+            esac
             echo
             echo "### Jira 티켓 요약"
             jq -r '.jiraSummary // "연결된 Jira 티켓 없음"' review-result.json
