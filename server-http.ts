@@ -8,11 +8,13 @@ import {
   assertGitHubRepositoryAccess,
   parseAllowedRepositories,
   verifyGitHubOidcToken,
+  type GitHubOidcIdentity,
 } from "./github-oidc.js";
 
 import { parseGitHubRepositoryUrl } from "./github.js";
-
 import { reviewGitHubPullRequest } from "./review-orchestrator/github-review-service.js";
+import { JiraLifecycleRequestSchema } from "./jira-lifecycle-api.js";
+import { handleJiraPullRequestLifecycle } from "./jira-lifecycle-service.js";
 
 // 127.0.0.1은 내 Mac 내부에서만 접근할 수 있습니다.
 // 0.0.0.0은 배포 서버 외부에서 들어오는 요청도 받을 수 있습니다.
@@ -28,6 +30,85 @@ const mcpApiToken = process.env.MCP_API_TOKEN;
 const allowedRepositories = parseAllowedRepositories(
   process.env.REVIEWFLOW_ALLOWED_REPOSITORIES,
 );
+
+type GitHubRequestAuthenticationResult =
+  | {
+      success: true;
+      identity: GitHubOidcIdentity;
+    }
+  | {
+      success: false;
+      statusCode: 400 | 401 | 403;
+      message: string;
+    };
+
+// GitHub Actions OIDC 토큰과 요청 저장소 권한을 함께 검사합니다.
+// AI 리뷰 API와 Jira 생명주기 API에서 공통으로 사용합니다.
+const authenticateGitHubRequest = async (
+  authorization: string | undefined,
+  repositoryUrl: string,
+): Promise<GitHubRequestAuthenticationResult> => {
+  const oidcToken = extractBearerToken(authorization);
+
+  if (oidcToken === null) {
+    return {
+      success: false,
+      statusCode: 401,
+      message: "GitHub Actions OIDC 인증 토큰이 필요합니다.",
+    };
+  }
+
+  let identity: GitHubOidcIdentity;
+
+  try {
+    identity = await verifyGitHubOidcToken(oidcToken);
+  } catch {
+    return {
+      success: false,
+      statusCode: 401,
+      message: "GitHub Actions OIDC 인증에 실패했습니다.",
+    };
+  }
+
+  let requestedRepository: string;
+
+  try {
+    const parsedRepository = parseGitHubRepositoryUrl(repositoryUrl);
+
+    requestedRepository =
+      `${parsedRepository.owner}/` + `${parsedRepository.repository}`;
+  } catch (error: unknown) {
+    return {
+      success: false,
+      statusCode: 400,
+      message:
+        error instanceof Error
+          ? error.message
+          : "GitHub 저장소 주소가 올바르지 않습니다.",
+    };
+  }
+
+  try {
+    assertGitHubRepositoryAccess({
+      oidcRepository: identity.repository,
+      requestedRepository,
+      allowedRepositories,
+    });
+  } catch (error: unknown) {
+    return {
+      success: false,
+      statusCode: 403,
+      message:
+        error instanceof Error
+          ? error.message
+          : "ReviewFlow 사용 권한이 없습니다.",
+    };
+  }
+  return {
+    success: true,
+    identity,
+  };
+};
 
 app.get("/health", (_request, response) => {
   response.status(200).json({
@@ -157,6 +238,53 @@ app.post("/reviews/github", async (request, response) => {
   }
 });
 
+app.post("/jira/github-pull-request", async (request, response) => {
+  const requestResult = JiraLifecycleRequestSchema.safeParse(request.body);
+
+  if (!requestResult.success) {
+    response.status(400).json({
+      error: "Jira 생명주기 요청 형식이 올바르지 않습니다.",
+      details: requestResult.error.issues.map((issue) => {
+        return {
+          path: issue.path.join("."),
+          message: issue.message,
+        };
+      }),
+    });
+    return;
+  }
+
+  const authentication = await authenticateGitHubRequest(
+    request.headers.authorization,
+    requestResult.data.repositoryUrl,
+  );
+
+  if (!authentication.success) {
+    response.status(authentication.statusCode).json({
+      error: authentication.message,
+    });
+
+    return;
+  }
+
+  try {
+    const result = await handleJiraPullRequestLifecycle(
+      requestResult.data,
+      authentication.identity.actor,
+    );
+    response.status(200).json(result);
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Jira 생명주기 처리에 실패했습니다.";
+    console.error("Jira 생명주기 API 처리에 실패했습니다.", error);
+    response.status(500).json({
+      error: message,
+    });
+  }
+});
+
 // /mcp로 들어오는 모든 요청의 인증 정보를 검사합니다.
 // /health는 이 검사를 거치지 않으므로 상태 확인은 계속 가능합니다.
 app.use("/mcp", (request, response, next) => {
@@ -218,7 +346,7 @@ app.get("/mcp", (_request, response) => {
   });
 });
 
-app.delete("/mcp", (request, response) => {
+app.delete("/mcp", (_request, response) => {
   response.status(405).json({
     jsonrpc: "2.0",
     error: {
@@ -235,4 +363,7 @@ app.listen(port, host, () => {
   console.log(`Health check: http://127.0.0.1:${port}/health`);
   console.log(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
   console.log(`Review API endpoint: http://127.0.0.1:${port}/reviews/github`);
+  console.log(
+    `Jira lifecycle API endpoint: http://127.0.0.1:${port}/jira/github-pull-request`,
+  );
 });

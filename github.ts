@@ -271,3 +271,97 @@ export function parseGitHubRepositoryUrl(repositoryUrl: string): {
     repository,
   };
 }
+
+type GitHubPullRequestMetadataResponse = {
+  number: number;
+  title: string;
+  state: string;
+  merged: boolean;
+  html_url: string;
+  base: {
+    ref: string;
+  };
+  head: {
+    ref: string;
+  };
+};
+
+export type GitHubPullRequestMetadata = {
+  number: number;
+  title: string;
+  state: string;
+  merged: boolean;
+  url: string;
+  baseBranch: string;
+  targetBranch: string;
+};
+
+// Jira 생명주기 처리에 필요한 Pull Request 기본 정보만 조회합니다.
+// 변경 파일과 patch는 가져오지 않습니다.
+export const fetchGitHubPullRequestMetadata = async (
+  repositoryUrl: string,
+  pullNumber: number,
+): Promise<GitHubPullRequestMetadata> => {
+  const githubToken = process.env.GITHUB_TOKEN;
+
+  if (!githubToken) {
+    throw new Error("GITHUB_TOKEN 환경변수가 필요합니다.");
+  }
+
+  if (!Number.isInteger(pullNumber) || pullNumber < 1) {
+    throw new Error("Pull Request 번호는 1 이상의 정수여야 합니다");
+  }
+
+  const { owner, repository } = parseGitHubRepositoryUrl(repositoryUrl);
+
+  const apiUrl =
+    `https://api.github.com/repos/` +
+    `${encodeURIComponent(owner)}/` +
+    `${encodeURIComponent(repository)}/` +
+    `pulls/${pullNumber}`;
+
+  const response = await fetch(apiUrl, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${githubToken}`,
+      "X-GitHub-Api-Version": "2026-03-10",
+      "User-Agent": "reviewflow-mcp",
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(
+        `GitHub 저장소 또는 PR을 찾을 수 없습니다: ` +
+          `${owner}/${repository}#${pullNumber}`,
+      );
+    }
+
+    if (response.status === 401) {
+      throw new Error("GitHub 인증 토큰이 올바르지 않습니다.");
+    }
+
+    if (response.status === 403) {
+      throw new Error(
+        "GitHub API 접근 권한이 없거나 호출 한도를 초과했습니다.",
+      );
+    }
+
+    throw new Error(
+      `GitHub PR 조회에 실패했습니다. HTTP 상태: ${response.status}`,
+    );
+  }
+  const pullRequest =
+    (await response.json()) as GitHubPullRequestMetadataResponse;
+
+  return {
+    number: pullRequest.number,
+    title: pullRequest.title,
+    state: pullRequest.state,
+    merged: pullRequest.merged,
+    url: pullRequest.html_url,
+    baseBranch: pullRequest.base.ref,
+    targetBranch: pullRequest.head.ref,
+  };
+};
