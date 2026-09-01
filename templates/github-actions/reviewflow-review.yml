@@ -7,6 +7,7 @@ on:
       - synchronize
       - reopened
       - ready_for_review
+      - closed
 
 permissions:
   contents: read
@@ -22,6 +23,7 @@ jobs:
   review:
     # Draft PR과 외부 fork PR에서는 실행하지 않습니다.
     if: >
+      github.event.action != 'closed' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
 
@@ -217,3 +219,90 @@ jobs:
               exit 1
               ;;
           esac
+  jira-lifecycle:
+    # Jira가 설정된 기본 브랜치 대상 PR만 처리합니다.
+    # Draft PR은 건너뛰지만, Draft 상태에서 종료된 경우에는 종료 처리를 허용합니다.
+    if: >
+      vars.REVIEWFLOW_JIRA_PROJECT_KEY != '' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch &&
+      (
+        github.event.action == 'closed' ||
+        github.event.pull_request.draft == false
+      )
+
+    runs-on: ubuntu-latest
+
+    env:
+      JIRA_LIFECYCLE_API_URL: https://reviewflow-mcp.onrender.com/jira/github-pull-request
+      REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_ACTION: ${{ github.event.action }}
+      PR_MERGED: ${{ github.event.pull_request.merged }}
+      JIRA_PROJECT_KEY: ${{ vars.REVIEWFLOW_JIRA_PROJECT_KEY }}
+
+    steps:
+      - name: Call Jira lifecycle API
+        run: |
+          set -euo pipefail
+
+          OIDC_RESPONSE="$(
+            curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=reviewflow-mcp"
+          )"
+
+          OIDC_TOKEN="$(
+            printf '%s' "$OIDC_RESPONSE" |
+              jq -r '.value // empty'
+          )"
+
+          if [ -z "$OIDC_TOKEN" ]; then
+            echo "::error::GitHub OIDC 토큰을 발급받지 못했습니다."
+            exit 1
+          fi
+
+          echo "::add-mask::$OIDC_TOKEN"
+
+          HTTP_STATUS="$(
+            curl \
+              --silent \
+              --show-error \
+              --connect-timeout 20 \
+              --max-time 120 \
+              --output jira-lifecycle-result.json \
+              --write-out "%{http_code}" \
+              --request POST \
+              --header "Authorization: Bearer $OIDC_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$(
+                jq -n \
+                  --arg repositoryUrl "$REPOSITORY_URL" \
+                  --argjson pullNumber "$PR_NUMBER" \
+                  --arg action "$PR_ACTION" \
+                  --argjson merged "$PR_MERGED" \
+                  --arg jiraProjectKey "$JIRA_PROJECT_KEY" \
+                  '{
+                    repositoryUrl: $repositoryUrl,
+                    pullNumber: $pullNumber,
+                    action: $action,
+                    merged: $merged,
+                    jiraProjectKey: $jiraProjectKey
+                  }'
+              )" \
+              "$JIRA_LIFECYCLE_API_URL"
+          )"
+
+          echo "Jira lifecycle API HTTP 상태: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "::error::Jira lifecycle API 호출에 실패했습니다."
+            cat jira-lifecycle-result.json
+            exit 1
+          fi
+
+          echo "Jira lifecycle 처리 결과:"
+          jq . jira-lifecycle-result.json
