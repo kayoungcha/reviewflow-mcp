@@ -1,7 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { fetchGitHubPullRequest, parseGitHubRepositoryUrl } from "../github.js";
+import {
+  fetchGitHubPullRequest,
+  parseGitHubRepositoryUrl,
+} from "../../github/github.js";
 
 // 한 번의 MCP 응답에 포함할 patch 전체 길이 제한입니다.
 const MAX_TOTAL_PATCH_LENGTH = 60_000;

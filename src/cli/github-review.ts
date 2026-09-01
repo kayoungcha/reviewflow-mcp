@@ -1,6 +1,6 @@
 import { judge } from "./judge.js";
-import { shouldFailReview } from "./review-utils.js";
-import { reviewGitHubPullRequest } from "./github-review-service.js";
+import { shouldFailReview } from "../review/review-utils.js";
+import { reviewGitHubPullRequest } from "../review/github-review-service.js";
 
 // pnpm에서 전달된 -- 구분자를 제외하고 실제 인자만 가져옵니다.
 const argumentStartIndex = process.argv[2] === "--" ? 3 : 2;

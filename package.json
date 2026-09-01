@@ -1,22 +1,16 @@
 {
   "name": "reviewflow-mcp",
   "version": "1.0.0",
-  "description": "MCP 기반 Git, Jira 및 AI 코드 리뷰 자동화 서버",
-  "main": "index.js",
+  "private": true,
+  "description": "MCP 기반 GitHub, Jira 및 AI 코드 리뷰 자동화 서버 테스트",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "review": "node --env-file=.env --import tsx review-orchestrator/index.ts",
-    "review:github": "node --env-file=.env --import tsx review-orchestrator/github-review.ts",
+    "review:github": "node --env-file=.env --import tsx src/cli/github-review.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test review-orchestrator/*.test.ts *.test.ts",
-    "mcp:http": "node --env-file=.env --import tsx server-http.ts",
-    "mcp:http:test": "node --env-file=.env --import tsx http-client-test.ts",
-    "start": "node --import tsx server-http.ts"
+    "test": "tsx --test src/auth/*.test.ts src/github/*.test.ts src/jira/*.test.ts src/review/*.test.ts",
+    "mcp:http": "node --env-file=.env --import tsx src/server/server-http.ts",
+    "start": "node --import tsx src/server/server-http.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
