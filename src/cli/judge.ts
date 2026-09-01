@@ -1,4 +1,4 @@
-import type { ReviewResult } from "./types.js";
+import type { ReviewResult } from "../review/types.js";
 
 // OpenAI, Claude 등 여러 리뷰 결과를 배열로 받습니다.
 export function judge(reviews: ReviewResult[]) {
@@ -17,7 +17,7 @@ export function judge(reviews: ReviewResult[]) {
 
   console.log("\n### 코드 리뷰");
 
-  // OpenAI, Claude 등 각각의 리뷰 결과를 출력합니다.
+  // 각각의 리뷰 결과를 출력합니다.
   for (const review of reviews) {
     console.log(`\n#### ${review.reviewer}`);
     console.log(review.summary);

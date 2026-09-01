@@ -37,37 +37,6 @@ const readRequiredStringClaim = (
   return value;
 };
 
-// // GitHub Actions가 발급한 OIDC 토큰을 검증하고
-// // ReviewFlow에서 사용할 저장소 신원 정보를 반환합니다.
-// export const verifyGitHubOidcToken = async (
-//   token: string,
-// ): Promise<GitHubOidcIdentity> => {
-//   if (token.trim().length === 0) {
-//     throw new Error("GitHub OIDC 토큰이 필요합니다.");
-//   }
-
-//   const { payload } = await jwtVerify(token, githubOidcJwks, {
-//     // GitHub Actions OIDC 제공자가 발급한 토큰만 허용합니다.
-//     issuer: GITHUB_OIDC_ISSUER,
-//     // ReviewFlow용으로 요청한 토큰만 허용합니다.
-//     audience: REVIEWFLOW_OIDC_AUDIENCE,
-//     // GitHub Actions OIDC가 사용하는 서명 알고리즘만 허용합니다.
-//     algorithms: ["RS256"],
-//   });
-
-//   // jwtVerify는 서명뿐만 아니라 exp, nbf 같은 시간 정보도 검사합니다.
-//   const repository = readRequiredStringClaim(payload, "repository");
-//   const subject = readRequiredStringClaim(payload, "sub");
-
-//   const actor = typeof payload.actor === "string" ? payload.actor : null;
-
-//   return {
-//     repository,
-//     actor,
-//     subject,
-//   };
-// };
-
 // 실제 서비스에서 사용하는 함수입니다.
 // GitHub가 공개한 키 목록으로 OIDC 토큰을 검증합니다.
 export const verifyGitHubOidcToken = async (

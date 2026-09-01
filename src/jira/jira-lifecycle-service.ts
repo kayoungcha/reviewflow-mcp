@@ -1,7 +1,7 @@
 import type { JiraLifecycleRequest } from "./jira-lifecycle-api.js";
 import { requestJira } from "./jira-client.js";
-import { fetchGitHubPullRequestMetadata } from "./github.js";
-import { extractJiraIssueKeyForProject } from "./review-orchestrator/review-utils.js";
+import { fetchGitHubPullRequestMetadata } from "../github/github.js";
+import { extractJiraIssueKeyForProject } from "../review/review-utils.js";
 
 export type JiraLifecycleOperation =
   "move_to_review" | "move_to_done" | "comment_reopened" | "comment_unmerged";
@@ -9,7 +9,6 @@ export type JiraLifecycleOperation =
 // Pull Request 이벤트를 실제로 실행할 Jira 작업 목록으로 변환합니다.
 // Jira API 호출과 분리된 순수 함수이므로
 // 네트워크 연결 없이 이벤트별 동작을 테스트할 수 있습니다.
-
 export const determineJiraLifecycleOperations = (
   request: Pick<JiraLifecycleRequest, "action" | "merged">,
 ): JiraLifecycleOperation[] => {
@@ -142,7 +141,7 @@ export const executeJiraTransition = async (
 };
 
 export type JiraStatusTransitionResult =
-  "transitioned" | "already_in_target_status";
+  "transitioned" | "already_in_target_status" | "skipped_completed";
 
 export const moveJiraIssueToReview = async (
   issueKey: string,
@@ -155,11 +154,8 @@ export const moveJiraIssueToReview = async (
 
   const currentStatus = await getJiraIssueStatus(issueKey);
 
-  // 완료된 티켓은 검토 중으로 돌리지 않는다
   if (currentStatus.categoryKey === "done") {
-    throw new Error(
-      `완료된 Jira  티켓은 검토 중으로 되돌릴 수 없습니다. ${issueKey}`,
-    );
+    return "skipped_completed";
   }
 
   if (currentStatus.id === reviewStatusId) {

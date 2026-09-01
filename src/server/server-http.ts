@@ -1,20 +1,24 @@
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express";
-import { createReviewFlowMcpServer } from "./mcp-server.js";
+import { createReviewFlowMcpServer } from "../mcp/mcp-server.js";
+
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { GitHubReviewRequestSchema, extractBearerToken } from "./review-api.js";
+import {
+  GitHubReviewRequestSchema,
+  extractBearerToken,
+} from "../review/review-api.js";
 
 import {
   assertGitHubRepositoryAccess,
   parseAllowedRepositories,
   verifyGitHubOidcToken,
   type GitHubOidcIdentity,
-} from "./github-oidc.js";
+} from "../auth/github-oidc.js";
 
-import { parseGitHubRepositoryUrl } from "./github.js";
-import { reviewGitHubPullRequest } from "./review-orchestrator/github-review-service.js";
-import { JiraLifecycleRequestSchema } from "./jira-lifecycle-api.js";
-import { handleJiraPullRequestLifecycle } from "./jira-lifecycle-service.js";
+import { parseGitHubRepositoryUrl } from "../github/github.js";
+import { reviewGitHubPullRequest } from "../review/github-review-service.js";
+import { JiraLifecycleRequestSchema } from "../jira/jira-lifecycle-api.js";
+import { handleJiraPullRequestLifecycle } from "../jira/jira-lifecycle-service.js";
 
 // 127.0.0.1은 내 Mac 내부에서만 접근할 수 있습니다.
 // 0.0.0.0은 배포 서버 외부에서 들어오는 요청도 받을 수 있습니다.
