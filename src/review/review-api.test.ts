@@ -5,11 +5,14 @@ import { GitHubReviewRequestSchema, extractBearerToken } from "./review-api.js";
 
 test("올바른 GitHub 리뷰 요청을 허용합니다.", () => {
   const result = GitHubReviewRequestSchema.parse({
-    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    repositoryUrl: "https://github.com/kayoungcha/reviewflow-mcp",
     pullNumber: 12,
   });
 
-  assert.equal(result.repositoryUrl, "https://github.com/kayoungcha/MCP-test");
+  assert.equal(
+    result.repositoryUrl,
+    "https://github.com/kayoungcha/reviewflow-mcp",
+  );
   assert.equal(result.pullNumber, 12);
 });
 
@@ -24,7 +27,7 @@ test("올바르지 않은 저장소 주소를 거부합니다.", () => {
 
 test("1보다 작은 Pull Request 번호를 거부합니다.", () => {
   const result = GitHubReviewRequestSchema.safeParse({
-    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    repositoryUrl: "https://github.com/kayoungcha/reviewflow-mcp",
     pullNumber: 0,
   });
 
@@ -33,7 +36,7 @@ test("1보다 작은 Pull Request 번호를 거부합니다.", () => {
 
 test("정수가 아닌 Pull Request 번호를 거부합니다.", () => {
   const result = GitHubReviewRequestSchema.safeParse({
-    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    repositoryUrl: "https://github.com/kayoungcha/reviewflow-mcp",
     pullNumber: 1.5,
   });
 
@@ -42,7 +45,7 @@ test("정수가 아닌 Pull Request 번호를 거부합니다.", () => {
 
 test("예상하지 않은 요청 속성을 거부합니다.", () => {
   const result = GitHubReviewRequestSchema.safeParse({
-    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    repositoryUrl: "https://github.com/kayoungcha/reviewflow-mcp",
     pullNumber: 12,
     unexpected: true,
   });
@@ -78,7 +81,7 @@ test("Bearer 뒤에 토큰이 없으면 null을 반환합니다.", () => {
 
 test("Jira 프로젝트 키가 없어도 GitHub 리뷰 요청을 허용합니다.", () => {
   const result = GitHubReviewRequestSchema.parse({
-    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    repositoryUrl: "https://github.com/kayoungcha/reviewflow-mcp",
     pullNumber: 12,
   });
 
@@ -87,7 +90,7 @@ test("Jira 프로젝트 키가 없어도 GitHub 리뷰 요청을 허용합니다
 
 test("Jira 프로젝트 키를 대문자로 정규화합니다.", () => {
   const result = GitHubReviewRequestSchema.parse({
-    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    repositoryUrl: "https://github.com/kayoungcha/reviewflow-mcp",
     pullNumber: 12,
     jiraProjectKey: "mcptest",
   });
@@ -97,7 +100,7 @@ test("Jira 프로젝트 키를 대문자로 정규화합니다.", () => {
 
 test("올바르지 않은 Jira 프로젝트 키를 거부합니다.", () => {
   const result = GitHubReviewRequestSchema.safeParse({
-    repositoryUrl: "https://github.com/kayoungcha/MCP-test",
+    repositoryUrl: "https://github.com/kayoungcha/reviewflow-mcp",
     pullNumber: 12,
     jiraProjectKey: "MCP TEST!",
   });
