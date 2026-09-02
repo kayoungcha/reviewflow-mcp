@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      REVIEWFLOW_API_URL: https://reviewflow-mcp.onrender.com/reviews/github
+      REVIEWFLOW_API_URL: https://your-reviewflow-server.example.com/reviews/github
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
 
@@ -244,7 +244,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      JIRA_LIFECYCLE_API_URL: https://reviewflow-mcp.onrender.com/jira/github-pull-request
+      JIRA_LIFECYCLE_API_URL: https://your-reviewflow-server.example.com/jira/github-pull-request
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_ACTION: ${{ github.event.action }}
