@@ -108,34 +108,34 @@ test("변경 파일이 0개면 페이지를 요청하지 않습니다", async ()
 
 test("GitHub 저장소 주소에서 owner와 repository를 추출합니다", () => {
   const result = parseGitHubRepositoryUrl(
-    "https://github.com/kayoungcha/MCP-test",
+    "https://github.com/kayoungcha/reviewflow-mcp",
   );
 
   assert.deepEqual(result, {
     owner: "kayoungcha",
-    repository: "MCP-test",
+    repository: "reviewflow-mcp",
   });
 });
 
 test(".git으로 끝나는 저장소 주소도 처리합니다.", () => {
   const result = parseGitHubRepositoryUrl(
-    "https://github.com/kayoungcha/MCP-test.git",
+    "https://github.com/kayoungcha/reviewflow-mcp.git",
   );
 
   assert.deepEqual(result, {
     owner: "kayoungcha",
-    repository: "MCP-test",
+    repository: "reviewflow-mcp",
   });
 });
 
 test("마지막에 슬래시가 있는 저장소 주소도 처리합니다.", () => {
   const result = parseGitHubRepositoryUrl(
-    "https://github.com/kayoungcha/MCP-test/",
+    "https://github.com/kayoungcha/reviewflow-mcp/",
   );
 
   assert.deepEqual(result, {
     owner: "kayoungcha",
-    repository: "MCP-test",
+    repository: "reviewflow-mcp",
   });
 });
 
@@ -147,13 +147,15 @@ test("올바른 URL이 아니면 오류를 발생시킵니다 ", () => {
 
 test("github.com이 아닌 주소는 거부합니다", () => {
   assert.throws(() => {
-    parseGitHubRepositoryUrl("https://example.com/kayoungcha/MCP-test");
+    parseGitHubRepositoryUrl("https://example.com/kayoungcha/reviewflow-mcp");
   }, /github\.com 저장소 주소만/);
 });
 
 test("저장소보다 하위 경로가 더 있으면 거부합니다", () => {
   assert.throws(() => {
-    parseGitHubRepositoryUrl("https://github.com/kayoungcha/MCP-test/pulls/10");
+    parseGitHubRepositoryUrl(
+      "https://github.com/kayoungcha/reviewflow-mcp/pulls/10",
+    );
   }, /GitHub 저장소 주소는/);
 });
 

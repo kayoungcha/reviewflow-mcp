@@ -13,12 +13,12 @@ import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
 
 test("허용 저장소 환경변수를 저장소 목록으로 변환합니다.", () => {
   const repositories = parseAllowedRepositories(
-    "kayoungcha/MCP-test, kayoungcha/reviewflow-demo",
+    "kayoungcha/reviewflow-mcp, kayoungcha/reviewflow-demo",
   );
 
   assert.deepEqual(
     [...repositories],
-    ["kayoungcha/mcp-test", "kayoungcha/reviewflow-demo"],
+    ["kayoungcha/reviewflow-mcp", "kayoungcha/reviewflow-demo"],
   );
 });
 
@@ -59,20 +59,22 @@ test("OIDC 저장소와 요청 저장소가 같고 허용 목록에 있으면 �
 
 test("OIDC 저장소와 요청 저장소가 다르면 거부합니다.", () => {
   const allowedRepositories = parseAllowedRepositories(
-    "kayoungcha/reviewflow-demo,kayoungcha/MCP-test",
+    "kayoungcha/reviewflow-demo,kayoungcha/reviewflow-mcp",
   );
 
   assert.throws(() => {
     assertGitHubRepositoryAccess({
       oidcRepository: "kayoungcha/reviewflow-demo",
-      requestedRepository: "kayoungcha/MCP-test",
+      requestedRepository: "kayoungcha/reviewflow-mcp",
       allowedRepositories,
     });
   }, /OIDC 토큰의 저장소와 리뷰 요청 저장소가 일치하지 않습니다/);
 });
 
 test("허용 목록에 없는 저장소는 거부합니다.", () => {
-  const allowedRepositories = parseAllowedRepositories("kayoungcha/MCP-test");
+  const allowedRepositories = parseAllowedRepositories(
+    "kayoungcha/reviewflow-mcp",
+  );
 
   assert.throws(() => {
     assertGitHubRepositoryAccess({

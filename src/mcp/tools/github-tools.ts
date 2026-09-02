@@ -21,7 +21,7 @@ export function registerGitHubTools(mcpServer: McpServer): void {
         repositoryUrl: z
           .url()
           .describe(
-            "GitHub 저장소 주소 예: https://github.com.kayoungcha/MCP-test",
+            "GitHub 저장소 주소 예: https://github.com.kayoungcha/reviewflow-mcp",
           ),
 
         pullNumber: z
