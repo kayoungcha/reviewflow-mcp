@@ -17,7 +17,7 @@ jobs:
       pull-requests: write
       id-token: write
 
-    uses: kayoungcha/reviewflow-mcp/.github/workflows/reusable-reviewflow.yml@MCPTEST-29
+    uses: ./.github/workflows/reusable-reviewflow.yml
 
     with:
       reviewflow_server_url: https://reviewflow-mcp.onrender.com
