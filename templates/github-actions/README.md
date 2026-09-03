@@ -29,7 +29,7 @@ ReviewFlow 서버에는 다음 설정이 완료되어 있어야 합니다.
 
 서버 설정 방법은 프로젝트 루트의 [`README.md`](../../README.md)와 [`.env.example`](../../.env.example)을 참고합니다.
 
-## 1. 워크플로 설치
+## 1. 호출 워크플로 설치
 
 `reviewflow-review.yml` 파일을 ReviewFlow를 사용할 저장소의 다음 위치에 복사합니다.
 
@@ -39,19 +39,24 @@ ReviewFlow 서버에는 다음 설정이 완료되어 있어야 합니다.
 
 `.github/workflows` 폴더가 없다면 새로 생성합니다.
 
+이 파일은 전체 리뷰 로직을 포함하지 않고, `reviewflow-mcp` 저장소의 재사용 워크플로를 호출합니다.
+
+```yaml
+uses: kayoungcha/reviewflow-mcp/.github/workflows/reusable-reviewflow.yml@v1
+```
+
+`@v1`은 사용할 ReviewFlow 워크플로 버전을 의미합니다. 연결 저장소는 전체 워크플로를 다시 복사하지 않고, 중앙의 `v1` 워크플로를 계속 사용할 수 있습니다.
+
 ## 2. ReviewFlow 서버 주소 설정
 
-복사한 워크플로에서 다음 두 주소를 자신이 배포한 ReviewFlow 서버 주소로 변경합니다.
+복사한 워크플로에서 다음 값을 자신이 배포한 ReviewFlow 서버 주소로 변경합니다.
 
 ```yaml
-REVIEWFLOW_API_URL: https://your-reviewflow-server.example.com/reviews/github
+with:
+  reviewflow_server_url: https://your-reviewflow-server.example.com
 ```
 
-```yaml
-JIRA_LIFECYCLE_API_URL: https://your-reviewflow-server.example.com/jira/github-pull-request
-```
-
-Jira를 사용하지 않더라도 `REVIEWFLOW_API_URL`은 반드시 설정해야 합니다. `JIRA_LIFECYCLE_API_URL`은 Jira 연동 작업에서만 사용됩니다.
+`/reviews/github` 또는 `/jira/github-pull-request` 경로를 직접 붙이지 않습니다. 재사용 워크플로가 필요한 API 경로를 서버 기본 주소에 자동으로 추가합니다.
 
 ## 3. 허용 저장소 등록
 
@@ -150,10 +155,10 @@ feature/MCPTEST-30-review
 
 GitHub Actions에서 다음 작업을 확인할 수 있습니다.
 
-| 작업             | 역할                                |
-| ---------------- | ----------------------------------- |
-| `review`         | AI 코드 리뷰 실행과 PR 댓글 작성    |
-| `jira-lifecycle` | 선택적인 Jira 상태 이동과 댓글 작성 |
+| 작업                          | 역할                                |
+| ----------------------------- | ----------------------------------- |
+| `reviewflow / review`         | AI 코드 리뷰 실행과 PR 댓글 작성    |
+| `reviewflow / jira-lifecycle` | 선택적인 Jira 상태 이동과 댓글 작성 |
 
 ReviewFlow는 숨겨진 마커로 자동 리뷰 댓글을 구분합니다.
 
@@ -162,6 +167,8 @@ ReviewFlow는 숨겨진 마커로 자동 리뷰 댓글을 구분합니다.
 ```
 
 같은 PR에서 새로운 커밋을 push하면 새 댓글을 계속 추가하지 않고 기존 ReviewFlow 댓글을 갱신합니다.
+저장소의 Ruleset에서 ReviewFlow 리뷰를 필수 상태 체크로 사용한다면 `reviewflow / review`를 필수 체크로 등록합니다.
+jira-lifecycle은 Jira를 사용하지 않는 저장소에서는 실행되지 않으므로 필수 체크로 등록하지 않습니다.
 
 ### 리뷰 판정
 
@@ -175,9 +182,16 @@ ReviewFlow는 숨겨진 마커로 자동 리뷰 댓글을 구분합니다.
 
 ## 문제 해결
 
+### 재사용 워크플로를 찾지 못하는 경우
+
+- `uses`에 입력한 저장소와 파일 경로가 올바른지 확인합니다.
+- `@v1` 태그가 ReviewFlow 저장소에 존재하는지 확인합니다.
+- ReviewFlow 저장소가 호출 저장소에서 접근 가능한 공개 저장소인지 확인합니다.
+- 호출 저장소의 Actions 설정에서 외부 재사용 워크플로 사용이 허용되어 있는지 확인합니다.
+
 ### ReviewFlow API가 401을 반환하는 경우
 
-- 워크플로의 `permissions`에 `id-token: write`가 있는지 확인합니다.
+- 호출 워크플로의 `permissions`에 `id-token: write`가 있는지 확인합니다.
 - GitHub OIDC 토큰이 `Authorization: Bearer ...` 헤더로 전달되는지 확인합니다.
 - OIDC audience가 `reviewflow-mcp`인지 확인합니다.
 

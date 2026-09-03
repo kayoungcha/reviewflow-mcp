@@ -87,15 +87,17 @@ GitHub Actions는 장기 Secret 대신 GitHub가 실행 시점에 발급하는 �
 
 ## GitHub 저장소 연결
 
-ReviewFlow를 사용할 저장소에 Actions 템플릿을 복사합니다.
+ReviewFlow를 사용할 저장소에 Actions 호출 워크플로를 설치합니다.
 
 ```text
 templates/github-actions/reviewflow-review.yml
 → .github/workflows/reviewflow-review.yml
 ```
 
-그다음 ReviewFlow 서버의 `REVIEWFLOW_ALLOWED_REPOSITORIES`에 대상 저장소를 추가합니다.
+호출 워크플로는 reviewflow-mcp 저장소의 v1 재사용 워크플로를 실행합니다.
+실제 리뷰와 Jira 생명주기 로직은 중앙 재사용 워크플로에서 관리되므로, 연결 저장소마다 전체 워크플로를 복사해 유지할 필요가 없습니다.
 
+그다음 ReviewFlow 서버의 `REVIEWFLOW_ALLOWED_REPOSITORIES`에 대상 저장소를 추가합니다.
 Jira를 함께 사용한다면 대상 GitHub 저장소에 다음 Repository Variable을 등록합니다.
 
 ```text
@@ -103,7 +105,8 @@ Name: REVIEWFLOW_JIRA_PROJECT_KEY
 Value: MCPTEST
 ```
 
-Jira를 사용하지 않는 저장소에는 이 변수를 등록하지 않아도 됩니다. 이 경우 GitHub Pull Request만 수집하여 리뷰합니다.
+Jira를 사용하지 않는 저장소에는 이 변수를 등록하지 않아도 됩니다.
+이 경우 GitHub Pull Request만 수집하여 리뷰합니다.
 
 설치 방법과 필요한 GitHub 권한, 문제 해결 방법은 [`templates/github-actions/README.md`](./templates/github-actions/README.md)에서 확인할 수 있습니다.
 
@@ -205,20 +208,21 @@ GitHub 변경 파일은 페이지 단위로 최대 3,000개까지 조회합니�
 
 ## 프로젝트 구조
 
-| 경로                                  | 역할                                         |
-| ------------------------------------- | -------------------------------------------- |
-| `src/server/server-http.ts`           | ReviewFlow HTTP 서버와 API 엔드포인트 실행   |
-| `src/auth/github-oidc.ts`             | GitHub Actions OIDC 토큰 검증                |
-| `src/review/review-api.ts`            | 코드 리뷰 API 요청 형식 검증                 |
-| `src/review/github-review-service.ts` | GitHub·Jira 정보 수집과 리뷰 흐름 조율       |
-| `src/review/codex.ts`                 | OpenAI 코드 리뷰 실행                        |
-| `src/mcp/mcp-server.ts`               | MCP 서버 생성 및 도구 등록                   |
-| `src/mcp/tools/github-tools.ts`       | GitHub PR 조회 MCP 도구 등록                 |
-| `src/github/github.ts`                | GitHub API 요청과 PR 컨텍스트 생성           |
-| `src/jira/jira-client.ts`             | Jira API 요청                                |
-| `src/jira/jira-lifecycle-service.ts`  | PR 이벤트에 따른 Jira 상태와 댓글 처리       |
-| `src/cli/github-review.ts`            | 원격 GitHub PR을 수동으로 리뷰하는 CLI       |
-| `templates/github-actions/`           | 다른 저장소에 설치할 Actions 템플릿과 설명서 |
+| 경로                                        | 역할                                          |
+| ------------------------------------------- | --------------------------------------------- |
+| `.github/workflows/reusable-reviewflow.yml` | 다른 저장소에서 호출하는 중앙 재사용 워크플로 |
+| `src/server/server-http.ts`                 | ReviewFlow HTTP 서버와 API 엔드포인트 실행    |
+| `src/auth/github-oidc.ts`                   | GitHub Actions OIDC 토큰 검증                 |
+| `src/review/review-api.ts`                  | 코드 리뷰 API 요청 형식 검증                  |
+| `src/review/github-review-service.ts`       | GitHub·Jira 정보 수집과 리뷰 흐름 조율        |
+| `src/review/codex.ts`                       | OpenAI 코드 리뷰 실행                         |
+| `src/mcp/mcp-server.ts`                     | MCP 서버 생성 및 도구 등록                    |
+| `src/mcp/tools/github-tools.ts`             | GitHub PR 조회 MCP 도구 등록                  |
+| `src/github/github.ts`                      | GitHub API 요청과 PR 컨텍스트 생성            |
+| `src/jira/jira-client.ts`                   | Jira API 요청                                 |
+| `src/jira/jira-lifecycle-service.ts`        | PR 이벤트에 따른 Jira 상태와 댓글 처리        |
+| `src/cli/github-review.ts`                  | 원격 GitHub PR을 수동으로 리뷰하는 CLI        |
+| `templates/github-actions/`                 | 연결 저장소에 설치할 호출 워크플로와 설명서   |
 
 ## 수동 리뷰 및 검증
 
